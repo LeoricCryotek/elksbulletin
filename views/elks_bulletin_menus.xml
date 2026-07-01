@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     The "Newsletter" app menu: Newsletters (make/edit issues) and Templates.
+     === AI AGENT ===
+     Root app menu + two children. Actions come from elks_bulletin_views.xml
+     (loaded first per the manifest order).
+     ===================================================================== -->
+<odoo>
+    <menuitem id="menu_elksbulletin_root" name="Newsletter" sequence="90"/>
+
+    <menuitem id="menu_elksbulletin_issues" name="Newsletters"
+              parent="menu_elksbulletin_root"
+              action="action_elks_bulletin_issue" sequence="10"/>
+
+    <menuitem id="menu_elksbulletin_templates" name="Templates"
+              parent="menu_elksbulletin_root"
+              action="action_elks_bulletin_template" sequence="20"/>
+</odoo>

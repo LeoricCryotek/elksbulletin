@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     Our custom "Lodge" building blocks for the newsletter editor: the
+     masthead (header), Exalted Ruler message, In Memoriam box, Officers strip,
+     a purple section bar, 2/3+1/3 and three-column layouts, and a "continued
+     on page" bar. They appear under a "Lodge" category in the block panel — and
+     ONLY in this module's editor, not in Email Marketing.
+     === AI AGENT ===
+     Two parts: (1) inherit mass_mailing.email_designer_snippets to xpath our
+     "lodge" snippet-group + blocks INTO the base's single snippet_groups /
+     snippet_structure blocks. This is required: the html_builder snippet service
+     keys categories by the <snippets> element id and OVERWRITES on duplicates
+     (snippet_service.computeSnippetTemplates: snippetsByCategory[id] = ...), so a
+     separate template that t-calls the base and appends its own <snippets id>
+     blocks collides and hangs the panel. xpath-merging into the one base block is
+     the supported pattern. (2) define each snippet as a <template> whose root
+     <section> carries o_mail_snippet_general so the html_builder treats it as a
+     droppable block. Styling is INLINE so it survives the mass_mailing
+     email-inliner into body_html (used for print). Dynamic bits (logo, Volume/No.,
+     issue date) carry data-elks-field markers resolved at render time.
+     NOTE: because the snippets template is shared, these blocks also appear in
+     the Email Marketing designer. Scoping them to this module needs a different,
+     separately-tested mechanism (see HANDOFF task 5) — not a second snippet set.
+     ===================================================================== -->
+<odoo>
+
+    <!-- ============ (1) Register blocks into the panel ============ -->
+    <template id="elksbulletin_email_designer_snippets"
+              inherit_id="mass_mailing.email_designer_snippets">
+        <xpath expr="//snippets[@id='snippet_groups']" position="inside">
+            <t snippet-group="lodge" t-snippet="mass_mailing.s_snippet_group"
+               string="Lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_title.svg"/>
+        </xpath>
+        <!-- Structural / layout blocks: full-width sections -->
+        <xpath expr="//snippets[@id='snippet_structure']" position="inside">
+            <t t-snippet="elksbulletin.s_elks_masthead" string="Masthead" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_section_bar" string="Section Bar" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_er_message" string="Exalted Ruler Message" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_in_memoriam" string="In Memoriam" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_officers" string="Lodge Officers" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_two_thirds" string="Two-Thirds + One-Third" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_three_columns" string="Three Columns" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_continued" string="Continued On Page" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_mailing" string="Mailing Panel" group="lodge"/>
+        </xpath>
+        <!-- Dynamic data blocks live in INNER CONTENT so they can be dropped
+             into a column (1/3, 2/3, 3/3) of the layout blocks above and sized
+             to fit. Their content fills whatever width they're placed in. -->
+        <xpath expr="//snippets[@id='snippet_content']" position="inside">
+            <t t-snippet="elksbulletin.s_elks_new_members" string="New Members" group="lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_company_team.svg"/>
+            <t t-snippet="elksbulletin.s_elks_project_dollars" string="Project Dollars" group="lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_numbers.svg"/>
+            <t t-snippet="elksbulletin.s_elks_delinquents" string="Dues Report" group="lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_alert.svg"/>
+            <t t-snippet="elksbulletin.s_elks_charity" string="Charity Report" group="lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_hr.svg"/>
+            <t t-snippet="elksbulletin.s_elks_calendar" string="Lodge Calendar" group="lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_hr.svg"/>
+            <t t-snippet="elksbulletin.s_elks_page_break" string="Page Break" group="lodge"
+               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_hr.svg"/>
+        </xpath>
+    </template>
+
+    <!-- ============ (2) Snippet templates ============ -->
+
+    <!-- Masthead — the header widget. Dynamic bits carry data-elks-field so the
+         render-time resolver can inject real FRS values; visible text is the
+         current-issue placeholder shown in the editor. -->
+    <template id="s_elks_masthead" name="Lodge Masthead">
+        <section class="s_elks_masthead o_mail_snippet_general" data-name="Masthead">
+            <div class="container" style="border:2px solid #3f2566;border-radius:10px;overflow:hidden;">
+                <div style="background:#5b3b8c;color:#ffffff;padding:6px 16px;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;">
+                    Benevolent &amp; Protective Order of Elks &#9733; Lodge No.
+                    <span data-elks-field="lodge_number">896</span>
+                </div>
+                <div style="background:#efeaf7;padding:12px 10px 8px;text-align:center;">
+                    <div style="font-family:Georgia,serif;font-style:italic;font-size:36px;line-height:1;color:#111111;"><span data-elks-field="lodge_name">Lewiston Elks</span></div>
+                    <div style="font-family:Georgia,serif;font-weight:bold;font-size:44px;letter-spacing:2px;color:#111111;">NEWSLETTER</div>
+                    <div style="font-family:Georgia,serif;font-style:italic;font-size:18px;color:#3f2566;margin-top:2px;">Elks Care &#8212; Elks Share</div>
+                </div>
+                <div style="background:#f7efd6;border-top:2px solid #c9a227;color:#3f2566;padding:5px 16px;font-family:Arial,sans-serif;font-weight:bold;font-size:13px;">
+                    <span style="float:left;" data-elks-field="issue_month_year">July 2026</span>
+                    <span style="float:right;" data-elks-field="issue_ref">Volume 120, No. 7</span>
+                    <span style="display:block;text-align:center;" data-elks-field="city_state">Lewiston, Idaho</span>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Purple section bar -->
+    <template id="s_elks_section_bar" name="Section Bar">
+        <section class="s_elks_section_bar o_mail_snippet_general pt8 pb8" data-name="Section Bar">
+            <div class="container">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;font-size:18px;padding:4px 8px;border-radius:3px;">
+                    Committee &amp; Lodge News
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Exalted Ruler message: 2/3 text + 1/3 photo, boxed -->
+    <template id="s_elks_er_message" name="Exalted Ruler Message">
+        <section class="s_elks_er_message o_mail_snippet_general pt16 pb16" data-name="ER Message">
+            <div class="container" style="border:2px solid #3f2566;border-radius:10px;padding:12px 16px;">
+                <h1 style="font-family:Arial,sans-serif;font-weight:900;color:#000000;font-size:34px;line-height:1;margin:0 0 10px;">Message from the Exalted Ruler</h1>
+                <div class="row">
+                    <div class="col-md-8 col-12">
+                        <p style="text-align:justify;">Fellow Elks, as we open a new lodge year I want to begin with gratitude. Every dinner, ceremony, and fundraiser this year depended on your generosity and your time.</p>
+                        <p style="text-align:justify;">We uphold the virtues of Charity, Justice, Brotherly Love, and Fidelity in service to our neighbors. Thank you for making this lodge a home.</p>
+                        <p style="text-align:justify;">With fraternal regards, I remain at your service.</p>
+                    </div>
+                    <div class="col-md-4 col-12" style="text-align:center;">
+                        <img src="/web/static/img/placeholder.png" alt="Exalted Ruler" style="width:100%;max-width:180px;border:1px solid #555555;"/>
+                        <p style="font-family:Arial,sans-serif;font-weight:bold;color:#000000;margin-top:6px;">John Q. Member<br/>
+                            <span style="font-weight:normal;font-style:italic;color:#3f2566;">Exalted Ruler</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- In Memoriam: gold-accented quote box -->
+    <template id="s_elks_in_memoriam" name="In Memoriam">
+        <section class="s_elks_in_memoriam o_mail_snippet_general pt16 pb16" data-name="In Memoriam">
+            <div class="container" style="border:2px solid #c9a227;border-radius:8px;background:#f7efd6;padding:12px 16px;text-align:center;">
+                <div style="background:#c9a227;color:#3f2566;font-family:Arial,sans-serif;font-weight:bold;text-transform:uppercase;letter-spacing:1px;padding:3px;border-radius:3px;">In Memoriam</div>
+                <p style="font-family:Georgia,serif;font-weight:bold;color:#3f2566;font-size:17px;margin:10px 0 2px;">Member Name</p>
+                <p style="font-family:Arial,sans-serif;font-size:11px;color:#555555;margin:0;">Member 00 years &#183; 0000&#8211;0000</p>
+                <p style="font-family:Georgia,serif;font-style:italic;color:#5b3b8c;border-top:1px solid #c9a227;border-bottom:1px solid #c9a227;padding:8px 0;margin:10px 0 0;">&#8220;The faults of our members we write upon the sand; their virtues upon the tablets of love and memory.&#8221;</p>
+            </div>
+        </section>
+    </template>
+
+    <!-- Lodge Officers strip -->
+    <template id="s_elks_officers" name="Lodge Officers">
+        <section class="s_elks_officers o_mail_snippet_general pt16 pb16" data-name="Officers">
+            <div class="container" style="border:1px solid #d9cbe8;border-radius:6px;background:#e9e1f5;padding:10px 16px;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:8px;">Lodge Officers 2026&#8211;2027</div>
+                <div class="row" style="font-family:Arial,sans-serif;font-size:12px;">
+                    <div class="col-md-6 col-12"><b>Exalted Ruler</b> &#8212; John Q. Member</div>
+                    <div class="col-md-6 col-12"><b>Secretary</b> &#8212; Daniel S. Lewiston</div>
+                    <div class="col-md-6 col-12"><b>Leading Knight</b> &#8212; Thomas Cole</div>
+                    <div class="col-md-6 col-12"><b>Treasurer</b> &#8212; Patricia Hale</div>
+                    <div class="col-md-6 col-12"><b>Loyal Knight</b> &#8212; Robert Dunn</div>
+                    <div class="col-md-6 col-12"><b>Tiler</b> &#8212; Mark Stevens</div>
+                    <div class="col-md-6 col-12"><b>Lecturing Knight</b> &#8212; Linda Park</div>
+                    <div class="col-md-6 col-12"><b>Esquire</b> &#8212; George Ames</div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Two-Thirds + One-Third layout. Columns are plain so the editor's Style
+         panel (Border / Round Corners / Padding on the Column) is the single
+         box control — no baked-in box to fight with. -->
+    <template id="s_elks_two_thirds" name="Two-Thirds + One-Third">
+        <section class="s_elks_two_thirds o_mail_snippet_general pt16 pb16" data-name="Two-Thirds + One-Third">
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-8 col-12">
+                        <h2 style="font-family:Arial,sans-serif;font-weight:900;color:#000000;font-size:24px;margin:0 0 6px;">Main Story</h2>
+                        <p style="text-align:justify;">Two-thirds column for the lead article. Drag text and images here, or type directly to replace this copy.</p>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:16px;margin:0 0 6px;">Sidebar</h3>
+                        <p style="text-align:justify;">One-third column for a short note, box, or announcement.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Three equal columns. Plain columns; box is controlled via the Style
+         panel (see note above). -->
+    <template id="s_elks_three_columns" name="Three Columns">
+        <section class="s_elks_three_columns o_mail_snippet_general pt16 pb16" data-name="Three Columns">
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-4 col-12">
+                        <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:15px;margin:0 0 6px;">Column One</h3>
+                        <p style="text-align:justify;">Equal thirds for briefs and notes around the lodge.</p>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:15px;margin:0 0 6px;">Column Two</h3>
+                        <p style="text-align:justify;">Equal thirds for briefs and notes around the lodge.</p>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:15px;margin:0 0 6px;">Column Three</h3>
+                        <p style="text-align:justify;">Equal thirds for briefs and notes around the lodge.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Continued-on-page bar -->
+    <template id="s_elks_continued" name="Continued On Page">
+        <section class="s_elks_continued o_mail_snippet_general pt8 pb8" data-name="Continued">
+            <div class="container">
+                <div style="background:#d7d2dd;text-align:center;font-family:Georgia,serif;font-size:13px;padding:4px;">Please see <b>STORY,</b> Page 2</div>
+            </div>
+        </section>
+    </template>
+
+    <!-- ============ Dynamic blocks ============ -->
+    <!-- Each carries a data-elks-block marker. In the editor you see the
+         placeholder text; the real data is injected at print/preview by
+         elks.bulletin.issue._render_print_body(). -->
+
+    <!-- Dynamic blocks: NO hardcoded box (border/background) on the container so
+         the Style panel's Background Color / Border / Padding control the box.
+         Header bars are all the lodge purple (nothing defaults to the memorial
+         gold). Tighter padding (pt8/pb8). -->
+
+    <!-- New Members (name / age / initiation date) -->
+    <template id="s_elks_new_members" name="New Members (Dynamic)">
+        <section class="s_elks_new_members o_mail_snippet_general pt8 pb8" data-name="New Members (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Welcome Our New Members</div>
+                <div data-elks-block="new_members">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with new members (name, age, initiation date; veterans flagged) when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Project Dollars total (fiscal year) -->
+    <template id="s_elks_project_dollars" name="Project Dollars (Dynamic)">
+        <section class="s_elks_project_dollars o_mail_snippet_general pt8 pb8" data-name="Project Dollars (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Project Dollars</div>
+                <div data-elks-block="project_dollars">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with the fiscal-year Project Dollars total (Secretary's meeting-money reports) when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Dues report (counts only) -->
+    <template id="s_elks_delinquents" name="Delinquent Dues (Dynamic)">
+        <section class="s_elks_delinquents o_mail_snippet_general pt8 pb8" data-name="Delinquent Dues (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Dues Reminder</div>
+                <div data-elks-block="delinquents">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with total member and delinquent counts when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Charity report totals + submit-your-hours reminder -->
+    <template id="s_elks_charity" name="Charity Report (Dynamic)">
+        <section class="s_elks_charity o_mail_snippet_general pt8 pb8" data-name="Charity Report (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Charity &amp; Community Service</div>
+                <div data-elks-block="charity">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with fiscal-year charity totals plus the "report your hours" reminder when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Lodge Calendar (month grid of lodge events) -->
+    <template id="s_elks_calendar" name="Lodge Calendar (Dynamic)">
+        <section class="s_elks_calendar o_mail_snippet_general pt8 pb8" data-name="Lodge Calendar (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Lodge Calendar</div>
+                <div data-elks-block="calendar">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with this issue's month calendar and lodge events when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Page Break: forces the next content onto a new printed page. The dashed
+         line shows in the editor; it is invisible in the PDF (see report CSS
+         .s_elks_page_break). Use it wherever wkhtmltopdf's auto avoid isn't
+         enough. -->
+    <template id="s_elks_page_break" name="Page Break">
+        <section class="s_elks_page_break o_mail_snippet_general pt8 pb8" data-name="Page Break">
+            <div class="container">
+                <div class="s_elks_page_break_line" style="border-top:2px dashed #b39ddb;text-align:center;color:#8e7cc3;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding-top:3px;">&#9986; Page Break</div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Mailing Panel: lodge return address + non-profit postage box for the
+         back/mailing page. Static and editable in place (update address/permit
+         directly). Pair it with the Lodge Calendar for the mailing side. -->
+    <template id="s_elks_mailing" name="Mailing Panel">
+        <section class="s_elks_mailing o_mail_snippet_general pt8 pb8" data-name="Mailing Panel">
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-8 col-12">
+                        <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.35;color:#111;">
+                            <b>LEWISTON ELKS LODGE</b><br/>
+                            B.P.O.E. #896<br/>
+                            3444 Country Club Drive<br/>
+                            Lewiston, Idaho 83501<br/>
+                            Office: (208) 743-5591 &#183; Fax: (208) 743-5592<br/>
+                            Elksbpoe896@lewiston.com
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <div style="border:2px solid #000000;padding:8px 12px;text-align:center;font-family:Arial,sans-serif;font-size:11px;line-height:1.35;">
+                            Non-Profit Organization<br/>U.S. Postage<br/>
+                            <b style="font-size:15px;letter-spacing:3px;">PAID</b><br/>
+                            Lewiston, Idaho 83501<br/>Permit No. 46
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+</odoo>

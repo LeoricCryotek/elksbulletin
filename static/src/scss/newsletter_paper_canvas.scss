@@ -1,0 +1,79 @@
+// =============================================================================
+// === HUMAN ===
+// Makes the newsletter editing canvas look like a real sheet of US Letter paper
+// (8.5 in wide, with the print margins and a page shadow) instead of the fluid
+// email width — so columns and wrapping preview much closer to the printed PDF.
+// Only affects the Lodge Newsletter editor; regular Email Marketing is untouched.
+//
+// === AI AGENT ===
+// Loaded into the mass_mailing EDITING iframe via the bundle
+// mass_mailing.assets_inside_builder_iframe (the field toggles that bundle on the
+// canvas). Everything is scoped to .o_elksbulletin — the class on our template's
+// .o_layout wrapper (see data/bulletin_template_data.xml) — so it can never touch
+// other mailings. Letter and Legal share the same 8.5 in width, so width is
+// accurate for both; vertical pagination is shown by the PDF export, not here.
+// !important is required to beat the theme's email-width .o_layout rules.
+// The :has() desk-background rule is Chrome-friendly (the supported editor
+// browser) and simply no-ops elsewhere.
+// =============================================================================
+
+// Gray "desk" behind the page so the white sheet stands out (Chrome supports :has)
+body:has(.o_elksbulletin) {
+    background: #cfcbd6 !important;
+}
+
+// The page itself
+.o_elksbulletin {
+    position: relative !important;
+    width: 8.5in !important;
+    max-width: 8.5in !important;
+    margin: 16px auto !important;
+    padding: 8mm !important;                 // mirrors the paperformat margins
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    box-shadow: 0 0 0 1px #cfcfcf,
+                0 8px 28px rgba(0, 0, 0, 0.22) !important;
+
+    // Printable-area page-height (page height minus top+bottom margins).
+    // US Letter by default; Legal is taller (see modifier below).
+    --elks-page-h: 10.37in;   // 11in - 2*8mm
+}
+
+// Legal page size: taller printable area. Applied when the page is Legal
+// (a .o_elks_legal class on the wrapper — see note in the module: this can be
+// set from the page_size field via a small editor hook if desired).
+.o_elksbulletin.o_elks_legal {
+    --elks-page-h: 13.37in;   // 14in - 2*8mm
+}
+
+// Non-interactive overlay: a dashed "printable area" boundary plus faint
+// horizontal lines marking where each printed page ends. Purely a visual guide
+// so you can see how content will fall across pages; it never blocks editing.
+.o_elksbulletin::after {
+    content: "";
+    position: absolute;
+    top: 8mm;
+    left: 8mm;
+    right: 8mm;
+    bottom: 8mm;
+    pointer-events: none;
+    z-index: 5;
+    border: 1px dashed rgba(91, 59, 140, 0.55);
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--elks-page-h) - 2px),
+        rgba(200, 40, 40, 0.45) calc(var(--elks-page-h) - 2px),
+        rgba(200, 40, 40, 0.45) var(--elks-page-h)
+    );
+}
+
+// Let our containers fill the page width (matches the print stylesheet), instead
+// of Bootstrap's narrower responsive container max-widths.
+.o_elksbulletin .container,
+.o_elksbulletin .container-fluid {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}

@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     The print/PDF export for a newsletter issue. It turns the drag-and-drop
+     page into a page-sized PDF (US Letter or US Legal), adds a page-number
+     footer ("Page 1 of 4"), keeps blocks from splitting mid-box, and treats a
+     "Continued On Page" block as a real page break. There are two page sizes,
+     so there are two matching paper formats; the issue picks the right one.
+     === AI AGENT ===
+     wkhtmltopdf path (Odoo 19 still shells out to wkhtmltopdf). Layout:
+       * body  -> <div class="article" data-oe-model/-id/-lang> (ir_actions_report
+         ._prepare_html extracts nodes by class 'article' as the body).
+       * footer-> <div class="footer"> with <span class="page"/> / <span
+         class="topage"/> (wkhtmltopdf substitutes real page numbers via the
+         web.minimal_layout JS trick). Footer inline-styled (rendered as its own
+         mini-document, page CSS does not reach it).
+     Two report actions share one inner document template; each carries its own
+     paperformat so the model can choose Letter vs Legal by page_size. Print CSS
+     is injected INSIDE the article so it scopes into the rendered body: widens
+     the email .container to full page width, prevents block bleed, forces the
+     continued-block page break. Model/view/report changes require -u elksbulletin.
+     ===================================================================== -->
+<odoo>
+
+    <!-- ================= Paper formats ================= -->
+    <!-- US Letter (built-in size). Bottom margin reserves footer space. -->
+    <record id="paperformat_bulletin_letter" model="report.paperformat">
+        <field name="name">Lodge Newsletter — US Letter</field>
+        <field name="default" eval="False"/>
+        <field name="format">Letter</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">8</field>
+        <field name="margin_bottom">14</field>
+        <field name="margin_left">8</field>
+        <field name="margin_right">8</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+        <field name="disable_shrinking" eval="True"/>
+    </record>
+
+    <!-- US Legal (built-in size). -->
+    <record id="paperformat_bulletin_legal" model="report.paperformat">
+        <field name="name">Lodge Newsletter — US Legal</field>
+        <field name="default" eval="False"/>
+        <field name="format">Legal</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">8</field>
+        <field name="margin_bottom">14</field>
+        <field name="margin_left">8</field>
+        <field name="margin_right">8</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+        <field name="disable_shrinking" eval="True"/>
+    </record>
+
+    <!-- ================= Report actions (Letter / Legal) ================= -->
+    <record id="action_report_bulletin_letter" model="ir.actions.report">
+        <field name="name">Newsletter (Letter)</field>
+        <field name="model">elks.bulletin.issue</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksbulletin.report_bulletin_letter</field>
+        <field name="report_file">elksbulletin.report_bulletin_letter</field>
+        <field name="paperformat_id" ref="paperformat_bulletin_letter"/>
+        <field name="print_report_name">(object.name or 'Newsletter')</field>
+    </record>
+
+    <record id="action_report_bulletin_legal" model="ir.actions.report">
+        <field name="name">Newsletter (Legal)</field>
+        <field name="model">elks.bulletin.issue</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksbulletin.report_bulletin_legal</field>
+        <field name="report_file">elksbulletin.report_bulletin_legal</field>
+        <field name="paperformat_id" ref="paperformat_bulletin_legal"/>
+        <field name="print_report_name">(object.name or 'Newsletter')</field>
+    </record>
+
+    <!-- ================= Thin wrappers -> shared document ================= -->
+    <template id="report_bulletin_letter">
+        <t t-call="elksbulletin.report_bulletin_document"/>
+    </template>
+    <template id="report_bulletin_legal">
+        <t t-call="elksbulletin.report_bulletin_document"/>
+    </template>
+
+    <!-- ================= Shared document template ================= -->
+    <template id="report_bulletin_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <div class="article"
+                     t-att-data-oe-model="doc and doc._name"
+                     t-att-data-oe-id="doc and doc.id"
+                     t-att-data-oe-lang="doc and doc.env.context.get('lang')">
+
+                    <!-- Print CSS scoped into the rendered body -->
+                    <style>
+                        /* Widen the mass_mailing email container to the full page */
+                        .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
+                        * { box-sizing: border-box; }
+                        img { max-width: 100% !important; height: auto; }
+                        /* Never split a block across a page: if the block can't
+                           fit in what's left of the page, push the WHOLE block to
+                           the next page (a break is effectively inserted before
+                           it). Applied broadly so it survives the email inliner. */
+                        .o_mail_snippet_general,
+                        .o_mail_snippet_general > .container,
+                        section[class*="s_elks_"],
+                        section[class*="s_elks_"] > .container {
+                            page-break-inside: avoid !important;
+                            -webkit-column-break-inside: avoid;
+                            break-inside: avoid;
+                        }
+                        /* Author-controlled page break: the "Continued On Page" block */
+                        section.s_elks_continued { page-break-after: always; }
+                        /* Manual "Page Break" block: force the next content onto a
+                           new page, and hide its editor line in the PDF. */
+                        section.s_elks_page_break { page-break-after: always !important; padding: 0 !important; }
+                        .s_elks_page_break_line { border: 0 !important; color: transparent !important; height: 0 !important; padding: 0 !important; }
+                        /* Tighter line spacing inside blocks (was too airy) */
+                        .o_mail_snippet_general { line-height: 1.25; }
+                        .o_mail_snippet_general p { margin: 0 0 4px !important; line-height: 1.25 !important; }
+                        /* Masthead should not be orphaned from what follows */
+                        section.s_elks_masthead { page-break-after: avoid; }
+                        /* No content bleed: clip framed blocks to their box */
+                        section.o_mail_snippet_general > .container > div[style*="border"] { overflow: hidden; }
+                    </style>
+
+                    <!-- The drag-and-drop page (email-inlined HTML), with any
+                         dynamic Lodge blocks (New Members, Project Dollars,
+                         Delinquents, Charity) filled in from live lodge data. -->
+                    <t t-out="doc._render_print_body()"/>
+                </div>
+
+                <!-- Repeating page-number footer -->
+                <div class="footer"
+                     style="font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#3f2566;border-top:2px solid #3f2566;padding-top:4px;">
+                    <table style="width:100%;border:0;">
+                        <tr>
+                            <td style="text-align:left;">
+                                <t t-esc="doc.lodge_name or 'Lewiston Elks Lodge'"/>
+                                <t t-if="doc.lodge_number"> No. <t t-esc="doc.lodge_number"/></t>
+                                &#183; B.P.O.E.
+                            </td>
+                            <td style="text-align:center;font-weight:bold;">
+                                Page <span class="page"/> of <span class="topage"/>
+                            </td>
+                            <td style="text-align:right;">
+                                <t t-if="doc.issue_date" t-esc="doc.issue_date.strftime('%B %Y')"/>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

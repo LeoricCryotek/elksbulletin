@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     The starting "Lodge Newsletter" template a new issue copies from. This is
+     a placeholder starter; the fully branded, drag-and-drop snippet layout is
+     installed in the editor phase.
+     === AI AGENT ===
+     Seeds one is_default template. noupdate is left off (0) for now so the
+     editor-phase template replaces this starter on upgrade; switch to
+     noupdate="1" once the shipped layout is final so it won't overwrite edits.
+     ===================================================================== -->
+<odoo>
+    <record id="tmpl_lodge_newsletter" model="elks.bulletin.template">
+        <field name="name">Lodge Newsletter</field>
+        <field name="is_default" eval="True"/>
+        <field name="body_arch" type="html">
+            <div class="o_layout o_elksbulletin oe_unremovable">
+                <div class="container">
+                    <p><em>Starter layout — drag blocks in from the side panel
+                    to build your newsletter. The branded masthead, New Members,
+                    Calendar, and In Memoriam blocks arrive as custom blocks in
+                    the next step.</em></p>
+                </div>
+            </div>
+        </field>
+    </record>
+</odoo>
