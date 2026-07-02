@@ -28,6 +28,22 @@ from odoo import api, fields, models, _
 
 _logger = logging.getLogger(__name__)
 
+# Emoji code-point ranges (one capturing group so re.split keeps the matches).
+# Used to force emoji onto the bundled MONOCHROME font at print: WeasyPrint's
+# automatic fallback tends to grab a system COLOR emoji font whose bitmap glyphs
+# render blank/tiny, so emoji must be wrapped in a span that NAMES our font.
+_EMOJI_RE = re.compile(
+    "("
+    "[\U0001F000-\U0001FAFF\U0001F1E6-\U0001F1FF"
+    "☀-➿⬀-⯿⤴⤵〰〽㊗㊙"
+    "︎️‍]+"
+    ")"
+)
+# Inline style that pins a run to the bundled emoji font (see report @font-face
+# 'Elks Emoji'); monochrome Noto Emoji renders on every WeasyPrint build.
+_EMOJI_STYLE = ("font-family:'Elks Emoji','Noto Emoji','Symbola',sans-serif;"
+                "font-style:normal;font-weight:normal;")
+
 # Month selection for the "New Members" block source window.
 NEW_MEMBER_MONTHS = [
     ("fy", "Fiscal Year to Date"),
@@ -668,10 +684,47 @@ class ElksBulletinIssue(models.Model):
                     child.set("id", f"elks-flow-{flow_counter}")
                     flow_counter += 1
 
+        # 6) Force emoji onto the bundled monochrome font (must run LAST, after
+        #    all dynamic content is filled, so generated emoji are covered too).
+        self._wrap_emoji_fonts(frag)
+
         return Markup(
             "".join(lxml_html.tostring(c, encoding="unicode")
                     for c in frag)
         )
+
+    # === AI AGENT ===
+    # Wrap every emoji run in a <span> that NAMES the bundled 'Elks Emoji' font.
+    # Without this, WeasyPrint's per-glyph fallback (for text authored in Arial
+    # etc.) picks a system COLOR emoji font whose CBDT/CBLC bitmap glyphs render
+    # blank/tiny in the PDF; naming our monochrome @font-face makes them print.
+    # Walks text and tails only (never attributes); skips <style>/<script>.
+    def _wrap_emoji_fonts(self, root):
+        for el in list(root.iter()):
+            if not isinstance(el.tag, str) or el.tag in ("style", "script"):
+                continue
+            if el.text and _EMOJI_RE.search(el.text):
+                segs = _EMOJI_RE.split(el.text)
+                el.text = segs[0] or None
+                for i in range(1, len(segs), 2):
+                    span = etree.Element("span")
+                    span.set("style", _EMOJI_STYLE)
+                    span.text = segs[i]
+                    span.tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
+                    el.insert((i - 1) // 2, span)
+            for child in list(el):
+                if not (child.tail and _EMOJI_RE.search(child.tail)):
+                    continue
+                segs = _EMOJI_RE.split(child.tail)
+                child.tail = segs[0] or None
+                ref = child
+                for i in range(1, len(segs), 2):
+                    span = etree.Element("span")
+                    span.set("style", _EMOJI_STYLE)
+                    span.text = segs[i]
+                    span.tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
+                    ref.addnext(span)
+                    ref = span
 
     # === HUMAN ===
     # Pulls a Page Break up and out of the email-style table wrapping so the

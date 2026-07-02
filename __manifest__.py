@@ -131,6 +131,9 @@ served off disk by the report url_fetcher) so emoji render on any server with no
 system-font install. The module now AUTO-INSTALLS that font: on install and on
 every -u it downloads Noto Emoji into static/fonts/ if missing (guarded; falls
 back to the manual step in static/fonts/README.md if the server is offline).
+Emoji runs are also wrapped at print in a span that NAMES the bundled font, so
+WeasyPrint uses the monochrome glyphs instead of falling back to a system COLOR
+emoji font whose bitmap glyphs render blank/tiny.
 
 19.0.1.1.0 — Page breaks hoisted out of inliner tables (works in both PDF
 engines); inline Page Break variant; auto continuation markers; compact GL
