@@ -2,23 +2,42 @@
 <!-- =====================================================================
      === HUMAN ===
      The print/PDF export for a newsletter issue. It turns the drag-and-drop
-     page into a page-sized PDF (US Letter or US Legal), adds a page-number
-     footer ("Page 1 of 4"), keeps blocks from splitting mid-box, and treats a
-     "Continued On Page" block as a real page break. There are two page sizes,
-     so there are two matching paper formats; the issue picks the right one.
+     page into a page-sized PDF (US Letter or US Legal) with Grand Lodge
+     newspaper density: compact body text and tight spacing (measured from the
+     GL newsletter itself), a page-number footer, blocks kept whole across page
+     cuts, working Page Breaks, condensed purple header bars, and automatic
+     "Continued on page #" bars when a story spills to the next page. Two page
+     sizes, so two matching paper formats; the issue picks the right one.
      === AI AGENT ===
-     wkhtmltopdf path (Odoo 19 still shells out to wkhtmltopdf). Layout:
-       * body  -> <div class="article" data-oe-model/-id/-lang> (ir_actions_report
-         ._prepare_html extracts nodes by class 'article' as the body).
-       * footer-> <div class="footer"> with <span class="page"/> / <span
-         class="topage"/> (wkhtmltopdf substitutes real page numbers via the
-         web.minimal_layout JS trick). Footer inline-styled (rendered as its own
-         mini-document, page CSS does not reach it).
-     Two report actions share one inner document template; each carries its own
-     paperformat so the model can choose Letter vs Legal by page_size. Print CSS
-     is injected INSIDE the article so it scopes into the rendered body: widens
-     the email .container to full page width, prevents block bleed, forces the
-     continued-block page break. Model/view/report changes require -u elksbulletin.
+     Rendered by WeasyPrint when installed (models/ir_actions_report.py) — real
+     CSS paged media: @page size/margins, @bottom margin-box footer with
+     counter(page), break-inside: avoid — with graceful wkhtmltopdf fallback
+     (breaks still work; margin-box footer and auto-continuation don't).
+     Layout contract:
+       * body -> <div class="article" data-oe-model/-id/-lang> (core's
+         _prepare_html extracts nodes by class 'article').
+       * SOURCE = body_arch (clean, un-inlined editor markup), NOT body_html —
+         see models/elks_bulletin_issue._render_print_body. This is why the grid
+         needs the .row/.col-md-* flex rules below (the email inliner used to
+         supply that via tables, but its fixed email width printed at ~half page).
+       * Print CSS is injected INSIDE the article so it scopes into the body.
+         The pervasive !important + [style*=...] hooks remain because snippet
+         styling is authored INLINE (survives regardless of source) and to keep
+         the body_html fallback rendering if it is ever used (colors may appear
+         as authored hex or the inliner's rgb(); both forms matched).
+       * Compact "GL density" element rules (p/h1-h3/td/th) are deliberately
+         UNSCOPED so they can never silently go dead if a resolver step
+         doesn't match.
+       * Block conventions: .o_mail_snippet_general = structural sections;
+         .o_elks_inner = inner-content dynamic blocks; .o_elks_bar = condensed
+         purple headers; .s_elks_page_break* handled by the resolver (hoist +
+         div replacement), hide rules here are belt-and-suspenders;
+         .s_elks_continued_auto / _from_auto = bars spliced by the report's
+         auto-continuation pass; .s_elks_story_flow may split across pages
+         (that's the point), everything else avoids splitting.
+     Two report actions share one inner document template; each carries its
+     own paperformat so the model picks Letter vs Legal by page_size.
+     View/report changes require -u elksbulletin.
      ===================================================================== -->
 <odoo>
 
@@ -96,11 +115,26 @@
                      t-att-data-oe-id="doc and doc.id"
                      t-att-data-oe-lang="doc and doc.env.context.get('lang')">
 
+                    <!-- Font Awesome 4.7 (Odoo's bundled copy) so the Lodge
+                         Calendar's event graphics (<i class="fa fa-..."/>) render
+                         in the PDF. WeasyPrint has no web-asset bundle, so the
+                         icon font + its glyph-content CSS must be pulled in
+                         explicitly. @import must lead its own stylesheet, hence a
+                         separate <style>. The CSS + font files are served by the
+                         report's url_fetcher straight off disk (see
+                         ir_actions_report._bulletin_url_fetcher /static/ branch),
+                         so it works without an authenticated HTTP round-trip.
+                         NOTE: Unicode EMOJI in the calendar (seasonal header
+                         strip, some banner symbols) need a system emoji font on
+                         the SERVER running Odoo (e.g. fonts-noto-color-emoji or
+                         ttf-ancient-fonts/Symbola); they can't be shipped in CSS. -->
+                    <style>@import url("/web/static/src/libs/fontawesome/css/font-awesome.css");</style>
+
                     <style>
                         /* -------- Page + running footer (page numbers) -------- */
                         @page {
                             size: <t t-esc="'8.5in 14in' if doc.page_size == 'legal' else '8.5in 11in'"/>;
-                            margin: 0.5in 0.5in 0.62in 0.5in;
+                            margin: 0.42in 0.42in 0.58in 0.42in;
                             @bottom-left {
                                 content: "<t t-esc="doc.lodge_name or 'Lewiston Elks Lodge'"/> No. <t t-esc="doc.lodge_number or ''"/> \00B7 B.P.O.E.";
                                 font: 8.5pt Arial, sans-serif; color: #3f2566;
@@ -115,10 +149,82 @@
                             }
                         }
 
-                        body { font-family: Georgia, 'Times New Roman', serif; color: #111; }
+                        body { font-family: Georgia, 'Times New Roman', 'Apple Color Emoji', 'Noto Color Emoji', serif; color: #111; }
                         * { box-sizing: border-box; }
                         img { max-width: 100%; height: auto; }
                         .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
+
+                        /* -------- Compact "Grand Lodge" print density --------
+                           Measured from the GL newsletter reference PDF: body is
+                           Garamond 11pt on 12pt leading, headlines Arial Black
+                           20-25pt, meta 8-10pt — true newspaper density. The
+                           editor's inlined output runs ~13-16px on ~1.3-1.5
+                           leading with 16px section paddings, which roughly
+                           doubles the page count. Everything here uses !important
+                           ON PURPOSE: the mass_mailing inliner bakes editor CSS
+                           into style="" attributes, so a plain stylesheet rule
+                           can never win at print time. Masthead is deliberately
+                           untouched (its scale matches the GL masthead).
+                           BODY LEADING is the "Bulletin" font default (19.0.1.2.0):
+                           line-height: calc(1em + 5px) — a literal 5px gap between
+                           lines at any size — kept IDENTICAL to the editor canvas
+                           (newsletter_paper_canvas.scss) so what you type is what
+                           prints. Bumping this from the old 1.15 trades a little
+                           density for readability the lodge asked for. -->
+                        /* Deliberately UNSCOPED (p, not .o_mail_print_wrapper p):
+                           the wrapper class only exists when the resolver's
+                           flatten step matched; the report document is entirely
+                           the newsletter, so global element rules are safe and
+                           can never silently go dead. */
+                        p, li {
+                            font-size: 11.5px !important;
+                            line-height: calc(1em + 5px) !important;
+                            margin: 0 0 3px !important;
+                        }
+                        h1 { font-size: 20px !important; line-height: 1.05 !important; margin: 0 0 4px !important; }
+                        h2 { font-size: 14px !important; line-height: 1.1 !important; margin: 0 0 3px !important; }
+                        h3 { font-size: 12px !important; line-height: 1.1 !important; margin: 0 0 2px !important; }
+                        /* Decorative bordered box (In Memoriam keeps its gold
+                           frame by design): tighten the box's inner breathing
+                           room to match. The inliner turns .container into an
+                           attribute-less table carrying the border styles
+                           inline, so the rounded border in the style attribute
+                           is the only stable hook. The Message Block ships
+                           frameless as of 19.0.1.2.0, so it is no longer matched
+                           here; any box a user adds to it via the Style panel is
+                           theirs to size. */
+                        .s_elks_in_memoriam table[style*="border-radius"] {
+                            padding: 6px 10px !important;
+                        }
+                        /* Inner-content dynamic blocks (19.0.1.1.0+): keep each
+                           whole across page turns, tight vertical rhythm. */
+                        .o_elks_inner {
+                            display: block;
+                            break-inside: avoid; page-break-inside: avoid;
+                            margin: 0 0 4px;
+                            font-size: 11.5px; line-height: 1.15;
+                        }
+                        /* Purple header bars, condensed GL-style. The class
+                           covers new content; the [style*=] fallbacks catch
+                           LEGACY bars (class-less divs whose background color
+                           is baked inline — both the authored hex and the
+                           rgb() form the inliner may normalize it to). */
+                        .o_elks_bar,
+                        div[style*="background:#5b3b8c"],
+                        div[style*="background: #5b3b8c"],
+                        div[style*="background:rgb(91, 59, 140)"],
+                        div[style*="background: rgb(91, 59, 140)"] {
+                            padding: 1px 6px !important;
+                            margin-bottom: 2px !important;
+                            font-size: 11px !important;
+                            line-height: 1.3 !important;
+                        }
+                        /* Tight vertical rhythm inside data tables. Calendar
+                           cells keep their own (more specific) sizing rules. */
+                        td, th {
+                            padding-top: 1px !important;
+                            padding-bottom: 1px !important;
+                        }
 
                         /* -------- Layout: full-width blocks are BLOCK level (so
                            break-inside: avoid keeps them whole); only blocks you
@@ -129,10 +235,15 @@
                         .o_mail_print_wrapper { display: block; width: 100%; }
                         .o_mail_snippet_general {
                             display: block; width: 100%;
-                            box-sizing: border-box; font-size: 12px;
-                            break-inside: avoid; margin-bottom: 9px; line-height: 1.25;
+                            box-sizing: border-box; font-size: 11.5px;
+                            break-inside: avoid; margin-bottom: 5px !important;
+                            padding-top: 2px !important; padding-bottom: 2px !important;
+                            line-height: 1.15;
                         }
-                        .o_mail_snippet_general p { margin: 0 0 4px; line-height: 1.25; }
+                        /* Higher specificity than the bare `p` rule, so it must
+                           carry the same Bulletin leading or it would silently
+                           win and revert paragraphs inside sections to 1.15. */
+                        .o_mail_snippet_general p { margin: 0 0 3px; line-height: calc(1em + 5px); }
                         .o_mail_snippet_general tr, .o_mail_snippet_general img { break-inside: avoid; }
 
                         /* Per-block Width (Style panel): sized blocks go inline-block
@@ -142,6 +253,98 @@
                         .o_mail_snippet_general.o_elks_w_23 { display: inline-block; vertical-align: top; width: 66%; }
                         .o_mail_snippet_general.o_elks_w_12 { display: inline-block; vertical-align: top; width: 49.6%; }
                         .o_mail_snippet_general.o_elks_w_13 { display: inline-block; vertical-align: top; width: 33%; }
+
+                        /* -------- Bootstrap grid for print (19.0.1.2.0) --------
+                           We print body_arch — the CLEAN, un-inlined editor
+                           markup — not the email-inlined body_html (the inliner
+                           locked the page to a narrow email width, printing at
+                           ~half page). Un-inlined markup keeps the Bootstrap
+                           .row/.col-* as plain divs, so WeasyPrint needs the grid
+                           rules the email tables used to provide. WeasyPrint has
+                           real flexbox, so a light flex grid gives full-width,
+                           side-by-side columns (Message text + officer byline,
+                           Two-Thirds + One-Third, Three Columns, mailing panel,
+                           AND any image/ad rows the user builds with Columns).
+                           ALL breakpoints are covered (col-, col-sm/md/lg/xl/xxl-)
+                           because a dropped-in Columns block can use any of them —
+                           a col we don't style would collapse to full width and
+                           blow images up to full-page. ORDER MATTERS: breakpoints
+                           are listed ascending, so on a multi-class element
+                           (e.g. col-12 col-lg-6) the widest present breakpoint
+                           wins on the wide print page (mirrors Bootstrap's
+                           min-width media cascade without evaluating queries). */
+                        .row { display: flex; flex-wrap: wrap; align-items: flex-start; }
+                        .row:not(.o_grid_mode) > [class*="col-"] { box-sizing: border-box; padding: 0 8px; flex: 0 0 auto; }
+                        .col { flex: 1 0 0%; }
+                        /* Widths in BREAKPOINT order (base -> xxl) so on a
+                           multi-class column (e.g. "col-md-4 col-12") the widest
+                           breakpoint present wins at print width — the same
+                           cascade Bootstrap applies at >=lg on screen. Listing
+                           by column number instead would let col-12 (last) beat
+                           col-md-4 and force every column full-width (stacking). */
+                        .col-1{width:8.333333%}.col-2{width:16.666667%}.col-3{width:25%}.col-4{width:33.333333%}.col-5{width:41.666667%}.col-6{width:50%}.col-7{width:58.333333%}.col-8{width:66.666667%}.col-9{width:75%}.col-10{width:83.333333%}.col-11{width:91.666667%}.col-12{width:100%}
+                        .col-sm-1{width:8.333333%}.col-sm-2{width:16.666667%}.col-sm-3{width:25%}.col-sm-4{width:33.333333%}.col-sm-5{width:41.666667%}.col-sm-6{width:50%}.col-sm-7{width:58.333333%}.col-sm-8{width:66.666667%}.col-sm-9{width:75%}.col-sm-10{width:83.333333%}.col-sm-11{width:91.666667%}.col-sm-12{width:100%}
+                        .col-md-1{width:8.333333%}.col-md-2{width:16.666667%}.col-md-3{width:25%}.col-md-4{width:33.333333%}.col-md-5{width:41.666667%}.col-md-6{width:50%}.col-md-7{width:58.333333%}.col-md-8{width:66.666667%}.col-md-9{width:75%}.col-md-10{width:83.333333%}.col-md-11{width:91.666667%}.col-md-12{width:100%}
+                        .col-lg-1{width:8.333333%}.col-lg-2{width:16.666667%}.col-lg-3{width:25%}.col-lg-4{width:33.333333%}.col-lg-5{width:41.666667%}.col-lg-6{width:50%}.col-lg-7{width:58.333333%}.col-lg-8{width:66.666667%}.col-lg-9{width:75%}.col-lg-10{width:83.333333%}.col-lg-11{width:91.666667%}.col-lg-12{width:100%}
+                        .col-xl-1{width:8.333333%}.col-xl-2{width:16.666667%}.col-xl-3{width:25%}.col-xl-4{width:33.333333%}.col-xl-5{width:41.666667%}.col-xl-6{width:50%}.col-xl-7{width:58.333333%}.col-xl-8{width:66.666667%}.col-xl-9{width:75%}.col-xl-10{width:83.333333%}.col-xl-11{width:91.666667%}.col-xl-12{width:100%}
+                        .col-xxl-1{width:8.333333%}.col-xxl-2{width:16.666667%}.col-xxl-3{width:25%}.col-xxl-4{width:33.333333%}.col-xxl-5{width:41.666667%}.col-xxl-6{width:50%}.col-xxl-7{width:58.333333%}.col-xxl-8{width:66.666667%}.col-xxl-9{width:75%}.col-xxl-10{width:83.333333%}.col-xxl-11{width:91.666667%}.col-xxl-12{width:100%}
+
+                        /* -------- Free-form GRID layout in print (19.0.1.2.0) ---
+                           Blocks placed with the editor's experimental grid live
+                           in a ".row.o_grid_mode" whose children (.o_grid_item)
+                           are positioned by an inline "grid-area". Core only turns
+                           that row into a real CSS grid at >=lg (992px) screen
+                           width; a print page is ~816px, so on paper the grid
+                           never engaged and every grid item after the first
+                           collapsed/overlapped and vanished. Re-declare the grid
+                           UNCONDITIONALLY here so items land exactly where they
+                           were placed. The !important beats the .row flex rule
+                           above (which stays for ordinary Bootstrap rows). */
+                        .o_grid_mode {
+                            display: grid !important;
+                            grid-template-columns: repeat(12, 1fr) !important;
+                            grid-auto-rows: 50px;
+                            row-gap: 0; column-gap: 0;
+                        }
+                        .o_grid_mode > .o_grid_item {
+                            padding: 8px; margin: 0 !important;
+                            width: auto !important; min-width: 0;
+                        }
+
+                        /* -------- Rounded corners in print (19.0.1.2.0) --------
+                           The Style panel's Border / Round Corners writes CSS
+                           custom properties (--box-border-radius, or the four
+                           --box-border-*-radius) onto the element; the rule that
+                           turns them into an actual border-radius lives in an
+                           editor/website-only stylesheet, so in the PDF the
+                           corners came out square. Re-apply it here, scoped to
+                           elements that actually carry the variable so nothing
+                           else is affected. (Border WIDTH already survives via
+                           the inline border shorthand, so only radius needs it.) */
+                        [style*="--box-border-radius"] {
+                            border-radius:
+                                var(--box-border-top-left-radius, var(--box-border-radius))
+                                var(--box-border-top-right-radius, var(--box-border-radius))
+                                var(--box-border-bottom-right-radius, var(--box-border-radius))
+                                var(--box-border-bottom-left-radius, var(--box-border-radius)) !important;
+                        }
+                        /* Border WIDTH (pixel): the Style panel writes the chosen
+                           width into --box-border-width (+ a .border class), and
+                           only an editor/website stylesheet turns that variable
+                           into an actual border-width. Without it the PDF fell
+                           back to the CSS default "medium" (~3px), ignoring the
+                           px you picked. Re-apply it here (border-style/-color are
+                           written inline by the panel, so those already print).
+                           border-style:solid is a fallback only — an inline
+                           dashed/dotted/double from the panel outranks it. */
+                        [style*="--box-border-width"] {
+                            border-style: solid;
+                            border-width:
+                                var(--box-border-top-width, var(--box-border-width))
+                                var(--box-border-right-width, var(--box-border-width))
+                                var(--box-border-bottom-width, var(--box-border-width))
+                                var(--box-border-left-width, var(--box-border-width)) !important;
+                        }
 
                         /* Lodge Calendar: scale the published calendar down to fit a
                            portrait page (its cells are sized for a landscape sheet). */
@@ -201,6 +404,17 @@
                         .s_elks_calendar .elks-cal table.grid-table tr,
                         .s_elks_calendar .elks-cal table.grid-table td.cell {
                             break-inside: avoid; page-break-inside: avoid;
+                        }
+
+                        /* Member Photo Grid (manual, hand-filled photo cards):
+                           keep each card whole across page turns, and cap
+                           uploaded photos to the card's circle regardless of
+                           the original image size. */
+                        .s_elks_photo_grid td {
+                            break-inside: avoid; page-break-inside: avoid;
+                        }
+                        .s_elks_photo_grid img {
+                            width: 88px; height: 88px; object-fit: cover;
                         }
                     </style>
 

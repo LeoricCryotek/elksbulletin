@@ -3,15 +3,25 @@
 // Makes the newsletter editing canvas look like a real sheet of US Letter paper
 // (8.5 in wide, with the print margins and a page shadow) instead of the fluid
 // email width — so columns and wrapping preview much closer to the printed PDF.
-// Only affects the Lodge Newsletter editor; regular Email Marketing is untouched.
+// Adds ruler tick marks down both side edges (short tick every quarter inch,
+// long tick every inch) and a red line where each printed page ends, so you can
+// eyeball how far content is from the next page turn while editing. Only
+// affects the Lodge Newsletter editor; regular Email Marketing is untouched.
 //
 // === AI AGENT ===
 // Loaded into the mass_mailing EDITING iframe via the bundle
-// mass_mailing.assets_inside_builder_iframe (the field toggles that bundle on the
-// canvas). Everything is scoped to .o_elksbulletin — the class on our template's
-// .o_layout wrapper (see data/bulletin_template_data.xml) — so it can never touch
-// other mailings. Letter and Legal share the same 8.5 in width, so width is
-// accurate for both; vertical pagination is shown by the PDF export, not here.
+// mass_mailing.assets_inside_builder_iframe (SCSS-only in core — no JS runs in
+// the iframe; the page-turn spacers at forced breaks are computed by the
+// PageBreakPreview plugin in elks_builder_options.js, which owns the iframe
+// from the top frame). Everything is scoped to .o_elksbulletin — the class on
+// our template's .o_layout wrapper (see data/bulletin_template_data.xml) — so
+// it can never touch other mailings. Letter and Legal share the same 8.5 in
+// width; the printable-page HEIGHT lives in --elks-page-h (Letter default,
+// .o_elks_legal modifier), the single source of truth shared by the boundary
+// lines, the rulers, and the plugin's spacer math. HONESTY NOTE: the browser
+// canvas and WeasyPrint don't rasterize text identically, so the red lines are
+// a close approximation of natural breaks — the print-time auto-continuation
+// pass works off the REAL WeasyPrint layout and is the source of truth.
 // !important is required to beat the theme's email-width .o_layout rules.
 // The :has() desk-background rule is Chrome-friendly (the supported editor
 // browser) and simply no-ops elsewhere.
@@ -28,22 +38,27 @@ body:has(.o_elksbulletin) {
     width: 8.5in !important;
     max-width: 8.5in !important;
     margin: 16px auto !important;
-    padding: 8mm !important;                 // mirrors the paperformat margins
+    // Match the WeasyPrint @page margins EXACTLY (report: 0.42in sides) so the
+    // editable text column is the same width as the printed page — what you type
+    // wraps where it will print. (The PDF engine is WeasyPrint, whose @page
+    // margin is 0.42in; the 8mm paperformat only matters for the wkhtmltopdf
+    // fallback.)
+    padding: 0.42in !important;
     background: #ffffff !important;
     box-sizing: border-box !important;
     box-shadow: 0 0 0 1px #cfcfcf,
                 0 8px 28px rgba(0, 0, 0, 0.22) !important;
 
-    // Printable-area page-height (page height minus top+bottom margins).
-    // US Letter by default; Legal is taller (see modifier below).
-    --elks-page-h: 10.37in;   // 11in - 2*8mm
+    // Printable-area page-height (page height minus top 0.42in + bottom 0.58in
+    // @page margins). US Letter by default; Legal is taller (see modifier).
+    --elks-page-h: 10in;   // 11in - 0.42in - 0.58in
 }
 
 // Legal page size: taller printable area. Applied when the page is Legal
 // (a .o_elks_legal class on the wrapper — see note in the module: this can be
 // set from the page_size field via a small editor hook if desired).
 .o_elksbulletin.o_elks_legal {
-    --elks-page-h: 13.37in;   // 14in - 2*8mm
+    --elks-page-h: 13in;   // 14in - 0.42in - 0.58in
 }
 
 // Non-interactive overlay: a dashed "printable area" boundary, faint
@@ -61,10 +76,10 @@ body:has(.o_elksbulletin) {
 .o_elksbulletin::after {
     content: "";
     position: absolute;
-    top: 8mm;
-    left: 8mm;
-    right: 8mm;
-    bottom: 8mm;
+    top: 0.42in;
+    left: 0.42in;
+    right: 0.42in;
+    bottom: 0.58in;
     pointer-events: none;
     z-index: 5;
     border: 1px dashed rgba(91, 59, 140, 0.55);
@@ -137,3 +152,21 @@ body:has(.o_elksbulletin) {
 .o_elksbulletin .o_mail_snippet_general.o_elks_w_23 { width: 66% !important; }
 .o_elksbulletin .o_mail_snippet_general.o_elks_w_12 { width: 49.5% !important; }
 .o_elksbulletin .o_mail_snippet_general.o_elks_w_13 { width: 33% !important; }
+
+// -----------------------------------------------------------------------------
+// "Bulletin" font — the default newsletter type. The named font-family lives in
+// the editor's font dropdown (static/src/js/elks_editor_font.js); the tight,
+// newspaper-style leading (~5px between lines) can't ride on a font-family, so
+// it's set here as the page default. calc(1em + 5px) means "the line's own
+// height plus exactly 5px of leading" — a literal 5px gap between lines at any
+// font size, and it renders the same in the browser canvas and in WeasyPrint
+// (the report stylesheet carries the identical rule so editor == PDF). Applied
+// to the body text (p / li); headers and the purple bars set their own tighter
+// line-height inline and are intentionally left alone.
+.o_elksbulletin {
+    font-family: Georgia, 'Times New Roman', serif;
+}
+.o_elksbulletin p,
+.o_elksbulletin li {
+    line-height: calc(1em + 5px);
+}

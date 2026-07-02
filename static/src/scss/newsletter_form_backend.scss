@@ -1,0 +1,45 @@
+// =============================================================================
+// === HUMAN ===
+// Makes the Lodge Newsletter EDITOR form wide enough to show the drag-and-drop
+// canvas at true page width (8.5in), so what you see while editing matches the
+// printed PDF (line wraps, column widths, the Exalted Ruler message, etc.). By
+// default an Odoo form "sheet" caps at ~1140px and the mass_mailing builder
+// splits that between the canvas and its side panel, which squeezed the canvas
+// noticeably narrower than the print — making editing hard. Scoped to this
+// form only (the o_elksbulletin_form class on the <form>); every other form is
+// untouched.
+//
+// === AI AGENT ===
+// Loaded in web.assets_backend (runs in the Odoo web client, OUTSIDE the
+// builder iframe — the paper-canvas SCSS lives in the iframe bundle instead).
+// The class set in views/elks_bulletin_views.xml lands on the form renderer
+// root, so we can lift the sheet's max-width and let the mass_mailing_html
+// field (canvas + panel) use the full window width. The canvas itself is sized
+// to 8.5in by newsletter_paper_canvas.scss inside the iframe; widening the host
+// form just gives that 8.5in room to render without being compressed. A min
+// keeps the canvas usable even on smaller windows (horizontal scroll rather
+// than a squeezed-narrow canvas). !important beats the core sheet rules.
+// =============================================================================
+.o_elksbulletin_form {
+    // Let the sheet fill the available width instead of the ~1140px cap.
+    .o_form_sheet {
+        max-width: none !important;
+    }
+
+    // The editor field (mass_mailing builder: canvas + side panel) takes the
+    // full sheet width. min-width guarantees the ~8.5in canvas has room; below
+    // it the area scrolls horizontally rather than shrinking the page canvas.
+    // Both selectors target the same field (widget class + field name) so the
+    // rule holds even if the widget's generated class name changes.
+    .o_field_mass_mailing_html,
+    .o_field_widget[name="body_arch"] {
+        width: 100% !important;
+        min-width: 1180px;   // ~8.5in canvas (816px) + builder side panel
+    }
+}
+
+// On narrow windows, allow the sheet body to scroll horizontally so the
+// min-width canvas is reachable instead of clipped.
+.o_elksbulletin_form .o_form_sheet_bg {
+    overflow-x: auto;
+}

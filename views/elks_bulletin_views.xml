@@ -15,7 +15,7 @@
         <field name="name">elks.bulletin.issue.form</field>
         <field name="model">elks.bulletin.issue</field>
         <field name="arch" type="xml">
-            <form string="Newsletter">
+            <form string="Newsletter" class="o_elksbulletin_form">
                 <header>
                     <button name="action_preview_pdf" type="object"
                             string="Preview" class="btn-secondary"

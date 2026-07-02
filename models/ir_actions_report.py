@@ -2,38 +2,62 @@
 # =============================================================================
 # === HUMAN ===
 # Prints the Lodge Newsletter with a modern print engine (WeasyPrint) instead of
-# Odoo's default wkhtmltopdf, so blocks never bleed across page cuts, the layout
-# can flow in real newspaper columns, and page sizing / page numbers are exact.
-# Only the newsletter reports use this; every other report in the system prints
-# normally. If WeasyPrint isn't installed on the server, it quietly falls back to
-# the standard engine so nothing breaks.
+# Odoo's default wkhtmltopdf, so blocks never bleed across page cuts, page
+# sizing / page numbers are exact, and long stories automatically get
+# "Continued on page #" / "(Continued from page #)" bars exactly where they
+# break. Only the newsletter reports use this; every other report in the system
+# prints normally. If WeasyPrint isn't installed on the server, printing falls
+# back to the standard engine (page breaks still work; the auto "Continued"
+# bars and page-number footer don't) and a warning names what's missing.
 #
 # === AI AGENT ===
 # Overrides ir.actions.report._render_qweb_pdf. For our two report_names it
-# renders the QWeb to HTML (_render_qweb_html) and pipes it through WeasyPrint,
-# which has real CSS paged-media support (break-inside: avoid, CSS multicol +
-# column-span, @page size/margins + @bottom margin boxes with counter(page)).
-# A url_fetcher resolves /web/image and /web/content URLs via the ORM so member
-# photos / dragged images render without an authenticated HTTP round-trip;
-# data: URIs (masthead logo, computed photos) need no fetch. WeasyPrint is a
-# SOFT dependency: missing import or any render error -> super() (wkhtmltopdf),
-# so the module installs and runs either way. Model/report changes need
-# -u elksbulletin; this controller-style Python needs a server restart.
+# renders the QWeb to HTML (_render_qweb_html), runs the two-pass
+# auto-continuation marker insertion (_bulletin_insert_continuation_markers),
+# and pipes the result through WeasyPrint, which has real CSS paged-media
+# support (break-inside: avoid, @page size/margins + @bottom margin boxes with
+# counter(page)). A url_fetcher resolves /web/image and /web/content URLs via
+# the ORM so member photos / dragged images render without an authenticated
+# HTTP round-trip, and serves /<module>/static/* assets straight off disk (the
+# calendar's bundled Font Awesome CSS + font); data: URIs (masthead logo,
+# computed photos) need no fetch.
+# WeasyPrint is a SOFT dependency with two distinct behaviors:
+#   * absent/unloadable -> super() (wkhtmltopdf) + a WARNING naming the cause.
+#     The import guard catches Exception, NOT just ImportError: on macOS a
+#     missing native lib raises OSError from cffi's dlopen at import time, and
+#     that once took down the whole registry at server start.
+#   * present but a render error -> the error SURFACES (no silent fallback
+#     that would mask layout bugs).
+# Model/report changes need -u elksbulletin; this controller-style Python
+# needs a server restart.
 # =============================================================================
 import base64
 import logging
+import mimetypes
+import re
 from collections import defaultdict
 
 from lxml import etree, html as lxml_html
 
 from odoo import models
+from odoo.tools import file_path as _odoo_file_path
 
 _logger = logging.getLogger(__name__)
 
 try:
     import weasyprint
-except ImportError:  # pragma: no cover - optional dependency
+except Exception as _wp_err:  # pragma: no cover - optional dependency
+    # NOT just ImportError: on macOS, WeasyPrint raises OSError from cffi's
+    # dlopen at import time when the native Pango/GObject libraries are
+    # missing or not on the loader path (needs `brew install pango` +
+    # DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib in the environment that
+    # launches Odoo). A soft dependency must never prevent the module — let
+    # alone the whole registry — from loading; an uncaught OSError here once
+    # took down server startup entirely.
     weasyprint = None
+    logging.getLogger(__name__).warning(
+        "elksbulletin: WeasyPrint unavailable (%s); newsletter PDFs will "
+        "fall back to wkhtmltopdf until it is installed.", _wp_err)
 
 BULLETIN_REPORTS = (
     "elksbulletin.report_bulletin_letter",
@@ -44,24 +68,62 @@ BULLETIN_REPORTS = (
 class IrActionsReport(models.Model):
     _inherit = "ir.actions.report"
 
+    # === HUMAN ===
+    # The traffic cop: newsletter reports go to WeasyPrint when it's available;
+    # everything else (and the newsletter too, when WeasyPrint is missing) goes
+    # to Odoo's normal print engine, with a log warning naming what to install.
+    # DIAGNOSTIC: to test the legacy engine, set the system parameter
+    # elksbulletin.pdf_engine = "wkhtmltopdf" (unset it to go back). Every
+    # newsletter print logs which engine actually rendered it.
+    # === AI AGENT ===
+    # Engine dispatch. Only BULLETIN_REPORTS are affected. WeasyPrint present ->
+    # our renderer, and its errors surface (a silent wkhtmltopdf fallback would
+    # mask layout problems). WeasyPrint absent -> warn + super().
     def _render_qweb_pdf(self, report_ref, res_ids=None, data=None):
         report = self._get_report(report_ref)
         if report.report_name in BULLETIN_REPORTS:
-            if weasyprint:
+            # Engine toggle for diagnosis. Set the system parameter
+            # `elksbulletin.pdf_engine` = "wkhtmltopdf" (Settings > Technical >
+            # System Parameters) to force the legacy engine and compare output;
+            # unset it or set "weasyprint" for the default. Either way the INFO
+            # line below records which engine actually ran, so you can confirm
+            # whether WeasyPrint is really active (rounded corners / gradients /
+            # page-number footer only work under WeasyPrint).
+            engine = (self.env["ir.config_parameter"].sudo().get_param(
+                "elksbulletin.pdf_engine", "weasyprint") or "weasyprint")
+            engine = engine.strip().lower()
+            if weasyprint and engine != "wkhtmltopdf":
                 # Do NOT silently swallow WeasyPrint errors into a wkhtmltopdf
                 # fallback: that masks layout problems (page breaks / block
                 # sizing don't work under wkhtmltopdf). Let errors surface so
                 # they can be fixed. Only fall back when WeasyPrint is absent.
+                _logger.info(
+                    "elksbulletin: rendering %s with WeasyPrint %s",
+                    report.report_name, weasyprint.__version__)
                 return self._render_bulletin_weasyprint(report_ref, res_ids, data)
-            _logger.warning(
-                "elksbulletin: WeasyPrint is not installed; printing via "
-                "wkhtmltopdf. Page breaks and per-block sizing require "
-                "WeasyPrint (pip install weasyprint + Pango/Cairo).")
+            if engine == "wkhtmltopdf":
+                _logger.info(
+                    "elksbulletin: rendering %s with wkhtmltopdf (forced by "
+                    "system parameter elksbulletin.pdf_engine)",
+                    report.report_name)
+            else:
+                _logger.warning(
+                    "elksbulletin: WeasyPrint is not installed/loadable; "
+                    "printing via wkhtmltopdf. Page breaks, per-block sizing, "
+                    "rounded corners, gradients and the page-number footer all "
+                    "require WeasyPrint (pip install weasyprint + Pango/Cairo).")
         return super()._render_qweb_pdf(report_ref, res_ids=res_ids, data=data)
 
+    # === HUMAN ===
+    # Builds the actual PDF: renders the finished newsletter page, adds the
+    # automatic "Continued on page #" bars where stories really break, and
+    # converts it with WeasyPrint at the exact paper size.
     # === AI AGENT ===
-    # Render the newsletter HTML and convert with WeasyPrint. Returns the same
-    # (bytes, 'pdf') contract as the core method.
+    # Render the newsletter HTML, insert continuation markers (two-pass layout
+    # detection), and convert with WeasyPrint. Returns the same (bytes, 'pdf')
+    # contract as the core method. Deliberately skips core's
+    # _pre_render_qweb_pdf plumbing (attachment_use caching, test-mode HTML
+    # fallback) — single-record newsletters don't benefit, tradeoff documented.
     def _render_bulletin_weasyprint(self, report_ref, res_ids, data):
         html, _type = self._render_qweb_html(report_ref, res_ids, data=data)
         if isinstance(html, bytes):
@@ -183,21 +245,46 @@ class IrActionsReport(models.Model):
                 path = url
                 if base_url and path.startswith(base_url):
                     path = path[len(base_url):]
+                # Static assets (e.g. the bundled Font Awesome CSS + font used by
+                # the Lodge Calendar icons): serve straight off disk so they load
+                # without an authenticated HTTP round-trip / correct base_url.
+                # URL form: /<module>/static/<path-in-module> (?query stripped).
+                clean = path.split("?")[0]
+                if "/static/" in clean:
+                    try:
+                        rel = clean.lstrip("/")
+                        abs_path = _odoo_file_path(
+                            rel, filter_ext=(
+                                ".css", ".woff2", ".woff", ".ttf", ".otf",
+                                ".eot", ".svg", ".png", ".jpg", ".jpeg", ".gif"))
+                        with open(abs_path, "rb") as fh:
+                            raw = fh.read()
+                        mime = (mimetypes.guess_type(abs_path)[0]
+                                or "application/octet-stream")
+                        return {"string": raw, "mime_type": mime}
+                    except Exception:
+                        _logger.debug(
+                            "elksbulletin url_fetcher: static miss for %s", clean)
                 if path.startswith("/web/image") or path.startswith("/web/content"):
                     seg = [p for p in path.split("?")[0].strip("/").split("/")]
                     rest = seg[2:]  # drop 'web','image'|'content'
                     raw, mime = None, "image/png"
-                    if len(rest) >= 3 and not rest[0].isdigit():
-                        # /web/image/<model>/<id>/<field>
+                    first = rest[0] if rest else ""
+                    lead = re.match(r"^(\d+)", first)
+                    if lead and not first[:1].isalpha():
+                        # /web/image/<id>[-<unique>][/<w>x<h>][/<filename>] — the
+                        # form the editor writes for uploaded / related images
+                        # (ir.attachment). Take the leading integer id; ignore any
+                        # -unique suffix or trailing size/filename segments.
+                        att = env["ir.attachment"].sudo().browse(int(lead.group(1)))
+                        raw = att.raw or b""
+                        mime = att.mimetype or mime
+                    elif len(rest) >= 3:
+                        # /web/image/<model>/<id>/<field>[/<filename>]
                         model, rid, field = rest[0], int(rest[1]), rest[2]
                         rec = env[model].sudo().browse(rid)
                         val = rec[field] if field in rec._fields else False
                         raw = base64.b64decode(val) if val else b""
-                    elif rest and rest[0].isdigit():
-                        # /web/image/<attachment_id>[/filename]
-                        att = env["ir.attachment"].sudo().browse(int(rest[0]))
-                        raw = att.raw or b""
-                        mime = att.mimetype or mime
                     if raw is not None:
                         return {"string": raw, "mime_type": mime}
             except Exception:  # pragma: no cover - fall back to default

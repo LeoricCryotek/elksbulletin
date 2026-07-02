@@ -92,8 +92,14 @@ class ElksBulletinIssue(models.Model):
              "calendar month (of this issue's year) or all of the fiscal year.")
     new_member_photos = fields.Boolean(
         "Show New Member Photos", default=False,
-        help="Include member photos in the New Members block. Looks best when "
-             "the block is placed at full width (3/3).")
+        help="Include member photos in the New Members block, pulled from each "
+             "member's CONTACT photo (members without one get a monogram). "
+             "Looks best when the block is placed at full width (3/3).\n"
+             "If photos are taken at initiation and emailed to you instead of "
+             "stored on the contact, leave this off and use the 'Member Photo "
+             "Grid' block in the editor: drop it under New Members, then "
+             "double-click each placeholder and upload the emailed photo. That "
+             "grid is hand-edited content and is never overwritten at print.")
 
     # --- lodge settings (from elksfrs) -----------------------------------
     lodge_settings_id = fields.Many2one(
@@ -104,6 +110,16 @@ class ElksBulletinIssue(models.Model):
         related="lodge_settings_id.lodge_charter_date", readonly=True)
     lodge_logo = fields.Binary(
         related="lodge_settings_id.logo_lodge", readonly=True)
+    # Grand-Lodge-style banner assets (all from FRS lodge settings):
+    #   logo_lodge_bw       -> monochrome lodge logo (banner, left)
+    #   lodge_building_entry-> photo of the lodge (banner, right)
+    #   lodge_website       -> public URL shown across the banner's top bar
+    lodge_logo_bw = fields.Binary(
+        related="lodge_settings_id.logo_lodge_bw", readonly=True)
+    lodge_building = fields.Binary(
+        related="lodge_settings_id.lodge_building_entry", readonly=True)
+    lodge_website = fields.Char(
+        related="lodge_settings_id.lodge_website", readonly=True)
     lodge_name = fields.Char(
         related="lodge_settings_id.name", readonly=True)
     lodge_number = fields.Char(
@@ -311,19 +327,51 @@ class ElksBulletinIssue(models.Model):
         return start, end
 
     # === HUMAN ===
-    # Produces the print-ready page: takes the drag-and-drop layout and swaps
-    # each "dynamic" block (New Members, Project Dollars, Delinquent list,
-    # Charity totals) for the live numbers from the lodge modules. Used by the
-    # PDF so the newsletter is always current when you print it.
+    # Produces the print-ready page: takes the drag-and-drop layout, swaps each
+    # "dynamic" block (New Members, Project Dollars, Dues, Charity, Calendar,
+    # Events, Officers) for the live numbers from the lodge modules, fills the
+    # masthead and Officer's Message from lodge data, and fixes up the layout
+    # so Page Breaks actually break and side-by-side blocks never get split
+    # across pages. Used by the PDF so the newsletter is always current when
+    # you print it. Hand-edited Message titles are respected — only the default
+    # "Officer's Message" placeholder is auto-filled.
     # === AI AGENT ===
-    # Parses body_html (fallback body_arch), finds elements carrying
-    # data-elks-block="<key>", and replaces their inner content with computed
-    # HTML (tag + attributes preserved). Returns Markup. If there are no markers
-    # the body is returned unchanged. Data reads use sudo(); a failure in one
-    # block degrades to a small notice rather than breaking the whole render.
+    # PRINTS body_arch (the clean editor markup), NOT body_html. Rationale
+    # (19.0.1.2.0): body_html is the mass_mailing EMAIL-inliner output — built
+    # for Outlook, it table-izes the Bootstrap grid and locks the whole mailing
+    # to a narrow email width, which made the PDF render at ~half page width.
+    # We never email this document; WeasyPrint renders real CSS (flex grid,
+    # break-inside) directly, so the un-inlined body_arch prints full page width
+    # with proper side-by-side columns (the report stylesheet supplies the
+    # .row/.col-md-* grid). body_html is kept only as a fallback. Because the
+    # source is now un-inlined, the wrapper-table flatten (step 2) and the
+    # page-break table-hoist (step 3) are usually no-ops — harmless; they still
+    # guard any legacy inlined body_html that flows through the fallback.
+    # Parses that body and runs the resolver pipeline:
+    #   1  data-elks-block markers  -> computed HTML (tag + attrs preserved)
+    #   1b data-elks-field markers  -> masthead values (month, Volume/No.,
+    #      lodge name/number/city, logo as data: URI)
+    #   1c o_elks_officer_<pos> sections -> title (default placeholder only;
+    #      curly/straight apostrophes normalized) + byline photo/name/title
+    #   2  flatten the mass_mailing wrapper table (o_mail_wrapper_td) into a
+    #      block-level div (.o_mail_print_wrapper)
+    #   3  Page Breaks (both variants): hoist out of the inliner's table cells
+    #      (_hoist_to) and REPLACE with a bare break-after div — no PDF engine
+    #      honors a forced break inside a td, and wkhtmltopdf also ignores
+    #      page-break props on <table> elements
+    #   4  tag the section holder .o_elks_print_flow (print stylesheet hook)
+    #   4b wrap consecutive sized siblings (o_elks_w_*) in a shared
+    #      break-inside:avoid row so a page cut can't split a row
+    #   5  assign elks-flow-N ids to story-flow children (skipping page-break
+    #      elements) for the report's auto-continuation pass
+    # Returns Markup. No markers -> body returned unchanged. Data reads use
+    # sudo(); any failure degrades to a notice / the raw body rather than
+    # breaking the whole render.
     def _render_print_body(self):
         self.ensure_one()
-        html = self.body_html or self.body_arch or ""
+        # Prefer body_arch (clean, un-inlined markup): full-width, real CSS grid
+        # for WeasyPrint. body_html (email-inliner output) only as a fallback.
+        html = self.body_arch or self.body_html or ""
         if not html.strip():
             return Markup("")
         # Guard: a resolver error must never take down the whole PDF/report.
@@ -356,25 +404,38 @@ class ElksBulletinIssue(models.Model):
                     el.append(node)
 
         # 1b) Fill masthead dynamic fields (data-elks-field markers) so the
-        #     masthead reflects THIS issue (month, Volume/No., lodge, logo)
+        #     masthead / Grand-Lodge-style banner reflects THIS issue (month,
+        #     website, Volume/No., lodge name, logos and building photo)
         #     instead of the static placeholder.
         field_values = {
             "lodge_name": getattr(self, "lodge_name", "") or "",
             "lodge_number": getattr(self, "lodge_number", "") or "",
             "city_state": getattr(self, "city_state", "") or "",
             "issue_ref": getattr(self, "issue_ref", "") or "",
+            "lodge_website": getattr(self, "lodge_website", "") or "",
             "issue_month_year": (self.issue_date.strftime("%B %Y")
                                  if self.issue_date else ""),
         }
+        # Image markers -> the binary field to source, with graceful fallback.
+        # The B&W banner logo falls back to the colour lodge logo if unset.
+        image_fields = {
+            "logo_lodge": ("lodge_logo",),
+            "logo_lodge_bw": ("lodge_logo_bw", "lodge_logo"),
+            "lodge_building_entry": ("lodge_building",),
+        }
         for el in frag.xpath(".//*[@data-elks-field]"):
             key = el.get("data-elks-field")
-            if key == "logo_lodge":
-                if self.lodge_logo:
-                    el.set("src", "data:image/png;base64,"
-                           + self.lodge_logo.decode())
+            if key in image_fields:
+                data = next((getattr(self, f, False)
+                             for f in image_fields[key]
+                             if getattr(self, f, False)), False)
+                if data:
+                    el.set("src", "data:image/png;base64," + data.decode())
                     el.set("style", (el.get("style") or "").replace(
                         "display:none", "").replace("display: none", ""))
                 elif el.getparent() is not None:
+                    # No image on file: drop the placeholder rather than print
+                    # a broken-image / grey box.
                     el.getparent().remove(el)
                 continue
             if key in field_values:
@@ -398,6 +459,17 @@ class ElksBulletinIssue(models.Model):
                  if c.startswith("o_elks_officer_")),
                 "exalted_ruler")
             for title in sec.xpath(f".//*[{msg_t}]"):
+                # Respect hand-edited titles (e.g. "Exalted Ruler's Message
+                # Continued"): only auto-fill when the title is still the
+                # snippet's default placeholder. Curly apostrophes (\u2019)
+                # are normalized — the editor may substitute them for the
+                # template's straight quote.
+                current = " ".join(title.text_content().split()).lower()
+                current = current.replace("\u2019", "'")
+                # Only auto-fill an UNTOUCHED default (or empty) title; any edit
+                # means the user wrote their own title, so print it verbatim.
+                if current not in ("", "officer's message"):
+                    continue
                 for c in list(title):
                     title.remove(c)
                 title.text = f"Message from the {self._officer_label(position)}"
@@ -415,6 +487,20 @@ class ElksBulletinIssue(models.Model):
                         byl.text = (byl.text or "") + node
                     else:
                         byl.append(node)
+
+        # 1d) Bake the Style-panel border into LITERAL inline CSS. The panel
+        #     stores the chosen width/radius as CSS custom properties
+        #     (--box-border-width / --box-border-radius); the rule that turns
+        #     those into a real border only exists in an editor/website
+        #     stylesheet, and PDF engines are unreliable with var() (WeasyPrint
+        #     only supports it in single-value props in some versions; the
+        #     wkhtmltopdf fallback not at all). So resolve them here to plain
+        #     border-width / border-radius / border-style on the element — the
+        #     one fix that prints on BOTH engines. (Advice confirmed by an
+        #     external review; see HANDOFF.) border-color/-style are already
+        #     inline, so they're left as-is.
+        for el in frag.xpath(".//*[contains(@style, '--box-border')]"):
+            self._bake_box_border(el)
 
         # 2) Flatten the mass_mailing wrapper table into a plain div. All the
         #    sections normally live in ONE <td class="o_mail_wrapper_td">, and
@@ -434,14 +520,42 @@ class ElksBulletinIssue(models.Model):
                 holder.append(child)
             table.getparent().replace(table, holder)
 
-        # 3) Force the manual "Page Break" blocks. An inline page-break-after is
-        #    the most reliably honored by wkhtmltopdf.
-        pb_xpath = (".//*[contains(concat(' ', normalize-space(@class), ' '),"
-                    " ' s_elks_page_break ')]")
+        # 3) Force the manual "Page Break" blocks (both variants). Two parts:
+        #    (a) HOIST: the mass_mailing inliner (addTables/bootstrapToTable)
+        #        wraps every section in table>tr>td, and BOTH WeasyPrint and
+        #        wkhtmltopdf ignore a forced page break inside a table cell.
+        #        This is exactly why the July 2026 preview didn't break: the
+        #        break sat inside the inliner's table cells. So each break is
+        #        bubbled up to be a direct, block-level child of the flattened
+        #        print wrapper (splitting every ancestor around it; content
+        #        order preserved — see _hoist_to).
+        #    (b) STYLE: inline break-after (modern) + page-break-after (the
+        #        only spelling wkhtmltopdf's Qt WebKit understands).
+        token = ("contains(concat(' ', normalize-space(@class), ' '),"
+                 " ' %s ')")
+        pb_xpath = (".//*[" + (token % "s_elks_page_break") + " or "
+                    + (token % "s_elks_page_break_inline") + "]")
+        wrappers = frag.xpath(
+            ".//*[contains(concat(' ', normalize-space(@class), ' '),"
+            " ' o_mail_print_wrapper ')]")
+        hoist_stop = wrappers[0] if wrappers else frag
         for pb in frag.xpath(pb_xpath):
-            style = (pb.get("style") or "").rstrip("; ")
-            pb.set("style", (style + ";" if style else "")
-                   + "break-after:page;page-break-after:always;display:block;")
+            self._hoist_to(pb, hoist_stop)
+            # Replace the break element with a bare, empty <div>. Post-inliner
+            # the break is a <table> (addTables moves the section's attributes
+            # onto a table), and wkhtmltopdf's Qt WebKit ignores page-break
+            # properties on table elements — a div is honored by both engines.
+            # Dropping the children also guarantees the editor's dashed line
+            # can never leak into the PDF, independent of the hide CSS.
+            div = etree.Element("div")
+            if pb.get("class"):
+                div.set("class", pb.get("class"))
+            div.set("style",
+                    "break-after:page;page-break-after:always;"
+                    "display:block;height:0;")
+            parent = pb.getparent()
+            if parent is not None:
+                parent.replace(pb, div)
 
         # 4) Tag the element that directly holds the snippet sections so the
         #    print stylesheet can flow it in newspaper columns (full-width
@@ -531,6 +645,76 @@ class ElksBulletinIssue(models.Model):
                     for c in frag)
         )
 
+    # === HUMAN ===
+    # Pulls a Page Break up and out of the email-style table wrapping so the
+    # PDF engines actually honor it — the reason breaks used to be silently
+    # ignored. Content order is preserved; anything after the break simply
+    # continues in a copy of its old wrapper.
+    # === AI AGENT ===
+    # Bubble `el` up to become a direct child of `stop` by splitting each
+    # ancestor around it: preceding siblings stay in the ancestor, `el` moves
+    # up beside the ancestor, and any following siblings move into a shallow
+    # attribute-preserving clone (ids dropped to keep them unique) inserted
+    # right after `el`. Transiently odd positions (e.g. a div between <tr>s)
+    # exist only inside the loop; the final resting place is block context.
+    # Purpose: forced page breaks must escape the email-inliner's table cells,
+    # where no PDF engine honors them.
+    @staticmethod
+    def _hoist_to(el, stop):
+        while True:
+            parent = el.getparent()
+            if parent is None or parent is stop:
+                return
+            siblings = list(parent)
+            tail = siblings[siblings.index(el) + 1:]
+            parent.addnext(el)
+            if tail:
+                clone = etree.Element(parent.tag)
+                for k, v in parent.attrib.items():
+                    if k != "id":
+                        clone.set(k, v)
+                el.addnext(clone)
+                for node in tail:
+                    clone.append(node)
+
+    # === AI AGENT ===
+    # Resolve the Style-panel border CSS variables on one element into literal
+    # inline CSS (border-radius / border-width / border-style), so the border
+    # prints without relying on var() (unreliable in WeasyPrint's older versions
+    # and unsupported by the wkhtmltopdf fallback). Only fills a property we can
+    # derive AND that isn't already set literally, so a hand-authored inline
+    # border-radius/-width is never clobbered. border-color stays as authored.
+    @staticmethod
+    def _bake_box_border(el):
+        style = el.get("style") or ""
+        decls = {}
+        for part in style.split(";"):
+            if ":" in part:
+                k, v = part.split(":", 1)
+                decls[k.strip().lower()] = v.strip()
+        add = []
+        main_r = decls.get("--box-border-radius")
+        corners = [decls.get("--box-border-%s-radius" % c) or main_r
+                   for c in ("top-left", "top-right",
+                             "bottom-right", "bottom-left")]
+        if any(corners) and "border-radius" not in decls:
+            vals = [c or "0" for c in corners]
+            r = vals[0] if len(set(vals)) == 1 else " ".join(vals)
+            add.append("border-radius:%s" % r)
+            add.append("-webkit-border-radius:%s" % r)
+        main_w = decls.get("--box-border-width")
+        sides = [decls.get("--box-border-%s-width" % s) or main_w
+                 for s in ("top", "right", "bottom", "left")]
+        if any(sides) and "border-width" not in decls:
+            vals = [s or "0" for s in sides]
+            w = vals[0] if len(set(vals)) == 1 else " ".join(vals)
+            add.append("border-width:%s" % w)
+            if "border-style" not in decls:
+                add.append("border-style:solid")
+        if add:
+            base = style.rstrip("; ").strip()
+            el.set("style", (base + ";" if base else "") + ";".join(add) + ";")
+
     # === AI AGENT ===
     # Dispatch by block key. Wrapped so a data error never breaks the PDF.
     def _dynamic_block_html(self, key):
@@ -543,6 +727,7 @@ class ElksBulletinIssue(models.Model):
             "upcoming_events": self._html_upcoming_events,
             "events": self._html_events,
             "officers": self._html_officers,
+            "in_memoriam": self._html_in_memoriam,
         }
         builder = builders.get(key)
         if not builder:
@@ -598,6 +783,69 @@ class ElksBulletinIssue(models.Model):
     def _fmt_date(d):
         """'Jun 22, 2026' without platform-specific strftime codes."""
         return f"{d.strftime('%b')} {d.day}, {d.year}" if d else ""
+
+    # === AI AGENT ===
+    # In Memoriam: members flagged deceased (x_drop_reason == 'deceased') whose
+    # Date of Death (x_date_of_death) falls in the CALENDAR MONTH BEFORE the
+    # issue date. Deceased members are archived once the Secretary processes the
+    # death in CLMS, so the search runs with active_test=False to include them.
+    # Each member is a small centered card: name (+ a US flag for veterans,
+    # x_is_veteran) with membership tenure and a Life-Member badge below.
+    # Tenure is computed AT DEATH from x_date_initiated -> x_date_of_death minus
+    # x_lost_years (NOT x_member_years, which is relative to today and keeps
+    # counting after death). Life status: x_is_honorary_life_member ->
+    # "Honorary Life Member", else x_is_life_member -> "Life Member". The gold
+    # frame, header and fraternal quote are static in the snippet.
+    def _html_in_memoriam(self):
+        issue_d = self.issue_date or fields.Date.context_today(self)
+        prev_month_end = issue_d.replace(day=1) - timedelta(days=1)
+        prev_month_start = prev_month_end.replace(day=1)
+        members = self.env["res.partner"].sudo().with_context(
+            active_test=False).search([
+                ("x_drop_reason", "=", "deceased"),
+                ("x_date_of_death", ">=", prev_month_start),
+                ("x_date_of_death", "<=", prev_month_end),
+            ], order="x_date_of_death asc, name asc")
+        if not members:
+            return ('<p style="font-family:Arial,sans-serif;font-size:11px;'
+                    'color:#555555;font-style:italic;margin:6px 0 0;">'
+                    'No members reported this month.</p>')
+        # Compact, self-arranging layout: each member is an inline-block card
+        # (name on top; membership years + Life-Member badge below; a small US
+        # flag next to the name for veterans). Cards flow and wrap to fill the
+        # width — several sit on one row, a long list wraps to more rows —
+        # instead of one tall single-column stack.
+        entries = []
+        for mbr in members:
+            dod = getattr(mbr, "x_date_of_death", False)
+            init = getattr(mbr, "x_date_initiated", False)
+            lost = getattr(mbr, "x_lost_years", 0) or 0
+            # Membership tenure AT DEATH (x_member_years is relative to today,
+            # so it keeps counting after death — compute from the dates here).
+            meta_parts = []
+            if init and dod:
+                my = dod.year - init.year - (
+                    1 if (dod.month, dod.day) < (init.month, init.day) else 0)
+                my = max(0, my - lost)
+                meta_parts.append("Member %d year%s" % (my, "" if my == 1 else "s"))
+            if getattr(mbr, "x_is_honorary_life_member", False):
+                meta_parts.append("Honorary Life Member")
+            elif getattr(mbr, "x_is_life_member", False):
+                meta_parts.append("Life Member")
+            meta = " &#183; ".join(self._e(p) for p in meta_parts)
+            entries.append(
+                '<span style="display:inline-block;vertical-align:top;'
+                'margin:4px 16px;text-align:center;font-family:Georgia,serif;'
+                'line-height:1.25;">'
+                f'<span style="font-weight:bold;color:{self._PURPLE_DEEP};'
+                f'font-size:14px;">{self._e(mbr.name)}</span>{self._vet_flag(mbr)}'
+                + (('<br/><span style="color:#555555;font-size:10.5px;'
+                    'font-family:Arial,sans-serif;">'
+                    f'{meta}</span>') if meta else "")
+                + '</span>'
+            )
+        return ('<div style="text-align:center;margin:6px 0 2px;">'
+                + "".join(entries) + '</div>')
 
     # === AI AGENT ===
     # New members for the configured window (a single month of the issue year,

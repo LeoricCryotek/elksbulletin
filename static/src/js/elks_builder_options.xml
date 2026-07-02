@@ -2,8 +2,11 @@
 <!-- =====================================================================
      === HUMAN ===
      The controls shown in the editor's Style panel for Lodge blocks: a Width
-     picker (Full / Two-Thirds / Half / One-Third) for data blocks, and an Officer
-     picker on the Message Block. Their JavaScript lives in elks_builder_options.js.
+     picker (Full / Two-Thirds / Half / One-Third) for the structural blocks
+     that can sit side by side (Lodge Officers, In Memoriam), and an Officer
+     picker on the Message Block. Their JavaScript lives in
+     elks_builder_options.js. The dynamic data blocks have no Width picker —
+     they're inner content, sized by whichever column they're dropped into.
      === AI AGENT ===
      Owl templates for the option components (t-name must match each component's
      static template). They use the declarative html_builder widgets (BuilderRow /
