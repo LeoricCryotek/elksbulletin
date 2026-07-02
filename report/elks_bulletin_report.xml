@@ -129,6 +129,12 @@
                          the SERVER running Odoo (e.g. fonts-noto-color-emoji or
                          ttf-ancient-fonts/Symbola); they can't be shipped in CSS. -->
                     <style>@import url("/web/static/src/libs/fontawesome/css/font-awesome.css");</style>
+                    <!-- Fallback path: Odoo's FontAwesome has lived at
+                         /web/static/lib/fontawesome in some builds. WeasyPrint
+                         silently ignores an @import it can't fetch, so listing
+                         both makes the icon font load regardless of which path
+                         this Odoo serves it from. -->
+                    <style>@import url("/web/static/lib/fontawesome/css/font-awesome.css");</style>
 
                     <style>
                         /* Bundled elegant script for the masthead lodge name +
@@ -149,7 +155,10 @@
                             size: <t t-esc="'8.5in 14in' if doc.page_size == 'legal' else '8.5in 11in'"/>;
                             margin: 0.42in 0.42in 0.58in 0.42in;
                             @bottom-left {
-                                content: "<t t-esc="doc.lodge_name or 'Lewiston Elks Lodge'"/> No. <t t-esc="doc.lodge_number or ''"/> \00B7 B.P.O.E.";
+                                /* Lodge name straight from FRS lodge settings
+                                   (elks.lodge.settings.name, the full "Lodge
+                                   Name" which already includes the number). */
+                                content: "<t t-esc="doc.lodge_name or ''"/> \00B7 B.P.O.E.";
                                 font: 8.5pt Arial, sans-serif; color: #3f2566;
                             }
                             @bottom-center {
@@ -194,6 +203,17 @@
                             line-height: calc(1em + 5px) !important;
                             margin: 0 0 3px !important;
                         }
+                        /* Bullet / numbered lists. We print body_arch (clean,
+                           un-inlined markup) WITHOUT the website/Bootstrap
+                           stylesheet, so WeasyPrint had no left padding for the
+                           markers and no explicit list-style — bullets and
+                           numbers disappeared. Re-declare them forcefully so
+                           list markers always render in the PDF. */
+                        ul, ol { margin: 0 0 4px !important; padding-left: 1.5em !important; }
+                        ul { list-style: disc outside !important; }
+                        ol { list-style: decimal outside !important; }
+                        ul ul { list-style: circle outside !important; }
+                        li { display: list-item !important; }
                         h1 { font-size: 20px !important; line-height: 1.05 !important; margin: 0 0 4px !important; }
                         h2 { font-size: 14px !important; line-height: 1.1 !important; margin: 0 0 3px !important; }
                         h3 { font-size: 12px !important; line-height: 1.1 !important; margin: 0 0 2px !important; }

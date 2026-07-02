@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.4.0",
+    "version": "19.0.1.5.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -63,6 +63,18 @@ Features
 
 Version history
 ---------------
+19.0.1.5.0 — Masthead title now prints exactly what the editor holds (no longer
+overwritten by the FRS lodge name) and uses a BUNDLED elegant script font
+(Great Vibes, static/fonts) @font-face'd in both the editor and the report, so
+the printed masthead matches the screen regardless of server-installed fonts.
+Footer names the lodge from FRS (elks.lodge.settings.name) without duplicating
+the number. Bullet/numbered list markers are re-declared for WeasyPrint (they
+had vanished when printing the un-inlined body). Font Awesome is imported from
+both known Odoo paths so icons load whichever this build serves. (Lodge Calendar
+that renders blank with KeyError: 'top' means elks_calendar_publisher is stale
+on the server — upgrade it so its template matches the grid builder. Calendar
+emoji need a system emoji font: apt install fonts-noto-color-emoji.)
+
 19.0.1.2.0 — Masthead rebuilt as a Grand-Lodge-style banner (date | website |
 volume top bar; B&W lodge logo, script lodge name + NEWSLETTER, lodge building
 photo; "Elks Care - Elks Share"), all dynamic from FRS (logo_lodge_bw,
