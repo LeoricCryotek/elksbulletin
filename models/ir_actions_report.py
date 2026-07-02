@@ -34,7 +34,6 @@
 import base64
 import logging
 import mimetypes
-import os
 import re
 import urllib.request
 from collections import defaultdict
@@ -42,7 +41,6 @@ from collections import defaultdict
 from lxml import etree, html as lxml_html
 
 from odoo import api, models
-from odoo.modules.module import get_module_path
 from odoo.tools import file_path as _odoo_file_path
 
 # Emoji font auto-install (see _elks_ensure_emoji_font). Monochrome Noto Emoji
@@ -50,6 +48,10 @@ from odoo.tools import file_path as _odoo_file_path
 EMOJI_FONT_URL = ("https://raw.githubusercontent.com/google/fonts/main/"
                   "ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf")
 EMOJI_FONT_REL = "static/fonts/NotoEmoji-Regular.ttf"
+# The font is stored as an ir.attachment under this name when it can't be
+# written into the module folder (the common case: module dir owned by root,
+# Odoo runs as a non-root user). The report url_fetcher serves it from here.
+EMOJI_FONT_ATTACH = "elksbulletin_NotoEmoji-Regular.ttf"
 # sfnt / web-font magic numbers used to sanity-check the download is a real font
 # and not an HTML error page.
 _FONT_MAGIC = (b"\x00\x01\x00\x00", b"true", b"ttcf", b"OTTO", b"wOFF", b"wOF2")
@@ -275,6 +277,14 @@ class IrActionsReport(models.Model):
                                 or "application/octet-stream")
                         return {"string": raw, "mime_type": mime}
                     except Exception:
+                        # The emoji font may live in an ir.attachment instead of
+                        # on disk (module dir read-only) — serve it from there.
+                        if clean.endswith(EMOJI_FONT_REL):
+                            att = env["ir.attachment"].sudo().search(
+                                [("name", "=", EMOJI_FONT_ATTACH)], limit=1)
+                            if att and att.raw:
+                                return {"string": att.raw,
+                                        "mime_type": "font/ttf"}
                         _logger.debug(
                             "elksbulletin url_fetcher: static miss for %s", clean)
                 if path.startswith("/web/image") or path.startswith("/web/content"):
@@ -307,29 +317,34 @@ class IrActionsReport(models.Model):
 
     # === HUMAN ===
     # So a fresh install "just works" with emoji: on install AND every module
-    # upgrade this fetches the (free, OFL) Noto Emoji font into the module's
-    # static/fonts/ folder if it isn't already there. That's the one file the
-    # printed newsletter needs to show emoji, and it's what was 404'ing before.
-    # Runs once (skips if the file is already present); never blocks install.
+    # upgrade this fetches the (free, OFL) Noto Emoji font and stores it where
+    # the printed newsletter can find it. That's the one file emoji need, and
+    # it's what was 404'ing before. Runs once (skips if already present); never
+    # blocks install.
     # === AI AGENT ===
     # Called by data/emoji_font_install.xml's <function> on load (install + -u).
-    # Downloads EMOJI_FONT_URL to <module>/static/fonts/NotoEmoji-Regular.ttf
-    # (the path the report @font-face 'Elks Emoji' + url_fetcher expect).
-    # Idempotent (size check), validates the bytes are a real font (not an HTML
-    # error page), writes atomically, and swallows every error (offline server,
-    # read-only module dir, etc.) with a clear warning pointing at the manual
-    # fallback in static/fonts/README.md. Network I/O at load is deliberate and
-    # bounded (30s timeout) — the lodge asked for a self-installing module.
+    # Downloads EMOJI_FONT_URL and stores it as an ir.attachment named
+    # EMOJI_FONT_ATTACH. Attachment (not the module folder) because the module
+    # dir is typically root-owned while Odoo runs non-root, so writing the file
+    # there fails with PermissionError; the filestore is always writable. The
+    # report url_fetcher serves the @font-face 'Elks Emoji' request
+    # (/elksbulletin/static/fonts/NotoEmoji-Regular.ttf) from disk if a committed
+    # copy exists, else from this attachment. Idempotent, validates the bytes are
+    # a real font (not an HTML error page), 30s-bounded network I/O, and swallows
+    # every error with a clear warning (manual fallback: static/fonts/README.md).
     @api.model
     def _elks_ensure_emoji_font(self):
         try:
-            base = get_module_path("elksbulletin")
-            if not base:
-                return False
-            target = os.path.join(base, EMOJI_FONT_REL)
-            if os.path.exists(target) and os.path.getsize(target) > 50000:
-                return True  # already installed
-            os.makedirs(os.path.dirname(target), exist_ok=True)
+            # Already committed on disk? Then nothing to do.
+            try:
+                _odoo_file_path("elksbulletin/" + EMOJI_FONT_REL)
+                return True
+            except Exception:
+                pass
+            Att = self.env["ir.attachment"].sudo()
+            existing = Att.search([("name", "=", EMOJI_FONT_ATTACH)], limit=1)
+            if existing and existing.raw and len(existing.raw) > 50000:
+                return True  # already stored
             req = urllib.request.Request(
                 EMOJI_FONT_URL, headers={"User-Agent": "elksbulletin"})
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -337,21 +352,21 @@ class IrActionsReport(models.Model):
             if not data or data[:4] not in _FONT_MAGIC:
                 _logger.warning(
                     "elksbulletin: emoji-font download was not a font (%d bytes);"
-                    " emoji will not print until static/fonts/NotoEmoji-Regular"
-                    ".ttf is added manually (see that folder's README).",
-                    len(data or b""))
+                    " emoji will not print until the font is added manually "
+                    "(see static/fonts/README.md).", len(data or b""))
                 return False
-            tmp = target + ".part"
-            with open(tmp, "wb") as fh:
-                fh.write(data)
-            os.replace(tmp, target)
+            vals = {
+                "name": EMOJI_FONT_ATTACH, "type": "binary",
+                "raw": data, "mimetype": "font/ttf",
+            }
+            (existing.write(vals) if existing else Att.create(vals))
             _logger.info(
-                "elksbulletin: emoji font installed (%d bytes) at %s",
-                len(data), target)
+                "elksbulletin: emoji font stored as attachment '%s' (%d bytes)",
+                EMOJI_FONT_ATTACH, len(data))
             return True
         except Exception as err:
             _logger.warning(
                 "elksbulletin: could not auto-install the emoji font (%s). "
-                "Emoji will print once static/fonts/NotoEmoji-Regular.ttf is "
-                "added (see that folder's README.md).", err)
+                "Emoji will print once the font is added (see "
+                "static/fonts/README.md).", err)
             return False
