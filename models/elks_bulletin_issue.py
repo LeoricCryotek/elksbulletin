@@ -446,24 +446,28 @@ class ElksBulletinIssue(models.Model):
                     el.remove(child)
                 el.text = field_values[key]
 
-        # 1b-ii) Normalize non-portable script fonts in the masthead. The
-        #        snippet historically used Mac/Windows system fonts (Brush
-        #        Script MT / Snell Roundhand / Segoe Script). Those exist on
-        #        the editor's machine but NOT on the Linux print server, so
-        #        WeasyPrint substituted a different font and the PDF did not
-        #        match the editor. Rewrite any such inline font-family to a
-        #        portable stack so print matches everywhere. Runs on ALREADY
-        #        STORED issues too (fixes the current newsletter, not just new
-        #        ones). Scoped to the masthead so body text is untouched.
-        _bad_fonts = ("Brush Script MT", "Snell Roundhand", "Segoe Script")
-        _portable = "font-family:Georgia,'Times New Roman',serif;"
+        # 1b-ii) Point the masthead script text at the BUNDLED 'Great Vibes'
+        #        font. The snippet historically used system fonts (Brush Script
+        #        MT / Snell Roundhand / Segoe Script / Georgia) that either are
+        #        not on the Linux print server or differ from the editor, so the
+        #        PDF didn't match. 'Great Vibes' ships in the module
+        #        (static/fonts) and is @font-face'd in BOTH the editor and the
+        #        report, so it renders identically everywhere. Rewriting here
+        #        also upgrades ALREADY-STORED issues (the current newsletter),
+        #        so no masthead rebuild is needed. Scoped to the masthead.
+        _script_markers = ("Brush Script MT", "Snell Roundhand",
+                           "Segoe Script", "Great Vibes")
+        _script_font = "font-family:'Great Vibes','Snell Roundhand',cursive;"
         for mast in frag.xpath(
                 ".//*[contains(concat(' ', normalize-space(@class), ' '),"
                 " ' s_elks_masthead ')]"):
             for el in mast.xpath(".//*[@style]"):
                 st = el.get("style") or ""
-                if any(f in st for f in _bad_fonts):
-                    st = re.sub(r"font-family\s*:[^;]*;?", _portable, st,
+                # Only the script lines (lodge name + tagline) carry these
+                # fonts; the bold serif "NEWSLETTER" line does not, so it is
+                # left untouched.
+                if any(f in st for f in _script_markers):
+                    st = re.sub(r"font-family\s*:[^;]*;?", _script_font, st,
                                 count=1)
                     el.set("style", st)
 

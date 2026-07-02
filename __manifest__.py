@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.4.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -154,12 +154,14 @@ FRS-driven masthead, Letter/Legal PDF export.
         # editor form so the canvas can show true page width, matching print.
         "web.assets_backend": [
             "elksbulletin/static/src/scss/newsletter_form_backend.scss",
+            "elksbulletin/static/src/scss/elks_masthead_font.scss",
         ],
         # Paper-size editing canvas: frames the newsletter content at true page
         # width inside the mass_mailing editing iframe. Scoped to .o_elksbulletin
         # so only this module's editor is affected.
         "mass_mailing.assets_inside_builder_iframe": [
             "elksbulletin/static/src/scss/newsletter_paper_canvas.scss",
+            "elksbulletin/static/src/scss/elks_masthead_font.scss",
         ],
         # Style-panel option controls (Width + Officer) for Lodge blocks, the
         # PageBreakPreview plugin, and the "Bulletin" font-dropdown entry.

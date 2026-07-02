@@ -131,6 +131,19 @@
                     <style>@import url("/web/static/src/libs/fontawesome/css/font-awesome.css");</style>
 
                     <style>
+                        /* Bundled elegant script for the masthead lodge name +
+                           tagline. WeasyPrint renders from THIS inline style
+                           (not the web asset bundles), so the @font-face is
+                           declared here too; the report url_fetcher serves the
+                           .ttf off disk from /elksbulletin/static/fonts/. This
+                           is what makes the printed masthead match the editor
+                           regardless of server-installed system fonts. */
+                        @font-face {
+                            font-family: 'Great Vibes';
+                            src: url('/elksbulletin/static/fonts/GreatVibes-Regular.ttf') format('truetype');
+                            font-weight: normal; font-style: normal;
+                        }
+
                         /* -------- Page + running footer (page numbers) -------- */
                         @page {
                             size: <t t-esc="'8.5in 14in' if doc.page_size == 'legal' else '8.5in 11in'"/>;
