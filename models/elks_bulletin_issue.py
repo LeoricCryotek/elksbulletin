@@ -700,6 +700,7 @@ class ElksBulletinIssue(models.Model):
     # blank/tiny in the PDF; naming our monochrome @font-face makes them print.
     # Walks text and tails only (never attributes); skips <style>/<script>.
     def _wrap_emoji_fonts(self, root):
+        count = 0
         for el in list(root.iter()):
             if not isinstance(el.tag, str) or el.tag in ("style", "script"):
                 continue
@@ -712,6 +713,7 @@ class ElksBulletinIssue(models.Model):
                     span.text = segs[i]
                     span.tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
                     el.insert((i - 1) // 2, span)
+                    count += 1
             for child in list(el):
                 if not (child.tail and _EMOJI_RE.search(child.tail)):
                     continue
@@ -725,6 +727,11 @@ class ElksBulletinIssue(models.Model):
                     span.tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
                     ref.addnext(span)
                     ref = span
+                    count += 1
+        # Proof-of-life so you can confirm from the log that this build is live
+        # AND how many emoji were pinned to the bundled font.
+        _logger.info("elksbulletin: wrapped %d emoji run(s) onto 'Elks Emoji'",
+                     count)
 
     # === HUMAN ===
     # Pulls a Page Break up and out of the email-style table wrapping so the
