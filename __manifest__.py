@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.5.0",
+    "version": "19.0.1.6.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.2.0
+Elks Bulletin — v19.0.1.6.0
 ===========================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -63,6 +63,18 @@ Features
 
 Version history
 ---------------
+19.0.1.6.0 — Emoji printing made self-contained and reliable. The module
+AUTO-INSTALLS the free monochrome Noto Emoji font on install and on every -u:
+it downloads the font and stores it as an ir.attachment (the module folder is
+often root-owned while Odoo runs non-root, so a file write there fails — the
+filestore is always writable); the report url_fetcher serves the @font-face
+'Elks Emoji' request from that attachment (or from static/fonts/ if a copy is
+committed). Emoji runs are also wrapped at print in a span that NAMES that font,
+so WeasyPrint draws the monochrome glyphs instead of falling back to a system
+COLOR emoji font whose bitmap glyphs render blank/tiny. A system-parameter
+(elksbulletin.pdf_engine) can force wkhtmltopdf for A/B diagnosis, and each
+print logs which engine rendered it.
+
 19.0.1.5.0 — Masthead title now prints exactly what the editor holds (no longer
 overwritten by the FRS lodge name) and uses a BUNDLED elegant script font
 (Great Vibes, static/fonts) @font-face'd in both the editor and the report, so
@@ -125,15 +137,8 @@ at death), a veteran flag, and a Life-Member / Honorary-Life-Member badge. The
 Events block (event.event) is now a teaser — PUBLISHED upcoming events only,
 showing the title in a bar + date + the first line of the description, plus one
 notice linking the lodge website's /event page (FRS lodge_website) instead of
-printing the whole event page. Emoji print support is now BUNDLED IN THE MODULE:
-an emoji @font-face (family "Elks Emoji" -> static/fonts/NotoEmoji-Regular.ttf,
-served off disk by the report url_fetcher) so emoji render on any server with no
-system-font install. The module now AUTO-INSTALLS that font: on install and on
-every -u it downloads Noto Emoji into static/fonts/ if missing (guarded; falls
-back to the manual step in static/fonts/README.md if the server is offline).
-Emoji runs are also wrapped at print in a span that NAMES the bundled font, so
-WeasyPrint uses the monochrome glyphs instead of falling back to a system COLOR
-emoji font whose bitmap glyphs render blank/tiny.
+printing the whole event page. (Emoji font auto-install + monochrome wrapping
+were finalized in 19.0.1.6.0 — see above.)
 
 19.0.1.1.0 — Page breaks hoisted out of inliner tables (works in both PDF
 engines); inline Page Break variant; auto continuation markers; compact GL
