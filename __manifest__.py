@@ -125,7 +125,10 @@ at death), a veteran flag, and a Life-Member / Honorary-Life-Member badge. The
 Events block (event.event) is now a teaser — PUBLISHED upcoming events only,
 showing the title in a bar + date + the first line of the description, plus one
 notice linking the lodge website's /event page (FRS lodge_website) instead of
-printing the whole event page.
+printing the whole event page. Emoji print support is now BUNDLED IN THE MODULE:
+an emoji @font-face (family "Elks Emoji" -> static/fonts/NotoEmoji-Regular.ttf,
+served off disk by the report url_fetcher) so emoji render on any server with no
+system-font install — drop the .ttf in per static/fonts/README.md.
 
 19.0.1.1.0 — Page breaks hoisted out of inliner tables (works in both PDF
 engines); inline Page Break variant; auto continuation markers; compact GL

@@ -149,6 +149,19 @@
                             src: url('/elksbulletin/static/fonts/GreatVibes-Regular.ttf') format('truetype');
                             font-weight: normal; font-style: normal;
                         }
+                        /* Emoji font BUNDLED IN THE MODULE (like Great Vibes),
+                           so emoji print on ANY server that installs elksbulletin
+                           — no system font / apt / root needed, works on hosted
+                           Odoo too. Drop the .ttf into static/fonts/ (see that
+                           folder's README) and it's served off disk by the
+                           report url_fetcher. Monochrome Noto Emoji is the
+                           default: a single static TTF that renders on every
+                           WeasyPrint version (unlike color-bitmap emoji fonts). */
+                        @font-face {
+                            font-family: 'Elks Emoji';
+                            src: url('/elksbulletin/static/fonts/NotoEmoji-Regular.ttf') format('truetype');
+                            font-weight: normal; font-style: normal;
+                        }
 
                         /* -------- Page + running footer (page numbers) -------- */
                         @page {
@@ -171,7 +184,13 @@
                             }
                         }
 
-                        body { font-family: Georgia, 'Times New Roman', 'Apple Color Emoji', 'Noto Color Emoji', serif; color: #111; }
+                        <!-- Emoji fonts are listed so WeasyPrint uses whichever
+                             one is installed on the PDF server (Noto Color Emoji
+                             = full colour; Noto Emoji / Symbola = monochrome,
+                             render on any WeasyPrint version). Fontconfig also
+                             falls back to them for emoji inside Arial/other text.
+                             Install one on the server for emoji to print. -->
+                        body { font-family: Georgia, 'Times New Roman', 'Elks Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Noto Emoji', 'Symbola', serif; color: #111; }
                         * { box-sizing: border-box; }
                         img { max-width: 100%; height: auto; }
                         .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
