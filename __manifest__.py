@@ -128,7 +128,9 @@ notice linking the lodge website's /event page (FRS lodge_website) instead of
 printing the whole event page. Emoji print support is now BUNDLED IN THE MODULE:
 an emoji @font-face (family "Elks Emoji" -> static/fonts/NotoEmoji-Regular.ttf,
 served off disk by the report url_fetcher) so emoji render on any server with no
-system-font install — drop the .ttf in per static/fonts/README.md.
+system-font install. The module now AUTO-INSTALLS that font: on install and on
+every -u it downloads Noto Emoji into static/fonts/ if missing (guarded; falls
+back to the manual step in static/fonts/README.md if the server is offline).
 
 19.0.1.1.0 — Page breaks hoisted out of inliner tables (works in both PDF
 engines); inline Page Break variant; auto continuation markers; compact GL
@@ -163,6 +165,7 @@ FRS-driven masthead, Letter/Legal PDF export.
         "views/snippets/elks_bulletin_snippets.xml",
         "views/elks_bulletin_views.xml",
         "views/elks_bulletin_menus.xml",
+        "data/emoji_font_install.xml",  # LAST: self-installs the emoji font
     ],
     "assets": {
         # Backend (web client, OUTSIDE the builder iframe): widen the newsletter

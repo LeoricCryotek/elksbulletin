@@ -34,13 +34,25 @@
 import base64
 import logging
 import mimetypes
+import os
 import re
+import urllib.request
 from collections import defaultdict
 
 from lxml import etree, html as lxml_html
 
-from odoo import models
+from odoo import api, models
+from odoo.modules.module import get_module_path
 from odoo.tools import file_path as _odoo_file_path
+
+# Emoji font auto-install (see _elks_ensure_emoji_font). Monochrome Noto Emoji
+# (OFL) — one static TTF that renders on every WeasyPrint version.
+EMOJI_FONT_URL = ("https://raw.githubusercontent.com/google/fonts/main/"
+                  "ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf")
+EMOJI_FONT_REL = "static/fonts/NotoEmoji-Regular.ttf"
+# sfnt / web-font magic numbers used to sanity-check the download is a real font
+# and not an HTML error page.
+_FONT_MAGIC = (b"\x00\x01\x00\x00", b"true", b"ttcf", b"OTTO", b"wOFF", b"wOF2")
 
 _logger = logging.getLogger(__name__)
 
@@ -292,3 +304,54 @@ class IrActionsReport(models.Model):
             return weasyprint.default_url_fetcher(url)
 
         return fetcher
+
+    # === HUMAN ===
+    # So a fresh install "just works" with emoji: on install AND every module
+    # upgrade this fetches the (free, OFL) Noto Emoji font into the module's
+    # static/fonts/ folder if it isn't already there. That's the one file the
+    # printed newsletter needs to show emoji, and it's what was 404'ing before.
+    # Runs once (skips if the file is already present); never blocks install.
+    # === AI AGENT ===
+    # Called by data/emoji_font_install.xml's <function> on load (install + -u).
+    # Downloads EMOJI_FONT_URL to <module>/static/fonts/NotoEmoji-Regular.ttf
+    # (the path the report @font-face 'Elks Emoji' + url_fetcher expect).
+    # Idempotent (size check), validates the bytes are a real font (not an HTML
+    # error page), writes atomically, and swallows every error (offline server,
+    # read-only module dir, etc.) with a clear warning pointing at the manual
+    # fallback in static/fonts/README.md. Network I/O at load is deliberate and
+    # bounded (30s timeout) — the lodge asked for a self-installing module.
+    @api.model
+    def _elks_ensure_emoji_font(self):
+        try:
+            base = get_module_path("elksbulletin")
+            if not base:
+                return False
+            target = os.path.join(base, EMOJI_FONT_REL)
+            if os.path.exists(target) and os.path.getsize(target) > 50000:
+                return True  # already installed
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            req = urllib.request.Request(
+                EMOJI_FONT_URL, headers={"User-Agent": "elksbulletin"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+            if not data or data[:4] not in _FONT_MAGIC:
+                _logger.warning(
+                    "elksbulletin: emoji-font download was not a font (%d bytes);"
+                    " emoji will not print until static/fonts/NotoEmoji-Regular"
+                    ".ttf is added manually (see that folder's README).",
+                    len(data or b""))
+                return False
+            tmp = target + ".part"
+            with open(tmp, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp, target)
+            _logger.info(
+                "elksbulletin: emoji font installed (%d bytes) at %s",
+                len(data), target)
+            return True
+        except Exception as err:
+            _logger.warning(
+                "elksbulletin: could not auto-install the emoji font (%s). "
+                "Emoji will print once static/fonts/NotoEmoji-Regular.ttf is "
+                "added (see that folder's README.md).", err)
+            return False

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     Makes the module self-install the emoji font. On install and on every
+     upgrade (-u elksbulletin) this runs the downloader that drops the free
+     Noto Emoji font into static/fonts/ so emoji print in the newsletter with
+     zero manual setup. It only downloads once (skips if the file is already
+     there) and never blocks the upgrade if the server is offline.
+     === AI AGENT ===
+     A bare <function> runs on each install/update. Calls
+     ir.actions.report._elks_ensure_emoji_font (fully guarded). Kept in its own
+     data file, loaded LAST, so the rest of the module is in place first.
+     ===================================================================== -->
+<odoo>
+    <function model="ir.actions.report" name="_elks_ensure_emoji_font"/>
+</odoo>
