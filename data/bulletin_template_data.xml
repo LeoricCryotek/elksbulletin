@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- =====================================================================
      === HUMAN ===
-     The starting "Lodge Newsletter" template a new issue copies from. This is
-     a placeholder starter; the fully branded, drag-and-drop snippet layout is
-     installed in the editor phase.
+     The starting "Lodge Newsletter" template a new issue copies from. It's a
+     ready-to-edit skeleton: branded masthead, a lead Exalted Ruler message, a
+     section bar, and the auto-filling data blocks (New Members, Project Dollars,
+     Charity, Officers, Calendar) plus the mailing panel. Editors just replace the
+     lead copy and print — everything else fills in from lodge data.
      === AI AGENT ===
-     Seeds one is_default template. noupdate is left off (0) for now so the
-     editor-phase template replaces this starter on upgrade; switch to
-     noupdate="1" once the shipped layout is final so it won't overwrite edits.
+     Seeds one is_default template. body_arch is the stored snippet markup wrapped
+     in .o_layout.o_elksbulletin; dynamic blocks carry data-elks-block markers, the
+     masthead carries data-elks-field markers — both resolved at print by
+     elks.bulletin.issue._render_print_body(). noupdate is off so upgrades refresh
+     the shipped starter; flip to noupdate="1" once it's final so it won't clobber
+     a lodge's edited default.
      ===================================================================== -->
 <odoo>
     <record id="tmpl_lodge_newsletter" model="elks.bulletin.template">
@@ -16,10 +21,93 @@
         <field name="body_arch" type="html">
             <div class="o_layout o_elksbulletin oe_unremovable">
                 <div class="container">
-                    <p><em>Starter layout — drag blocks in from the side panel
-                    to build your newsletter. The branded masthead, New Members,
-                    Calendar, and In Memoriam blocks arrive as custom blocks in
-                    the next step.</em></p>
+
+                    <section class="s_elks_masthead o_mail_snippet_general" data-name="Masthead">
+                        <div class="container" style="border:2px solid #3f2566;border-radius:10px;overflow:hidden;">
+                            <div style="background:#5b3b8c;color:#ffffff;padding:6px 16px;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;">Benevolent &amp; Protective Order of Elks &#9733; Lodge No. <span data-elks-field="lodge_number">896</span></div>
+                            <div style="background:#efeaf7;padding:12px 10px 8px;text-align:center;">
+                                <img data-elks-field="logo_lodge" alt="" style="display:none;max-height:66px;margin:0 auto 4px;"/>
+                                <div style="font-family:Georgia,serif;font-style:italic;font-size:36px;line-height:1;color:#111111;"><span data-elks-field="lodge_name">Lewiston Elks</span></div>
+                                <div style="font-family:Georgia,serif;font-weight:bold;font-size:44px;letter-spacing:2px;color:#111111;">NEWSLETTER</div>
+                                <div style="font-family:Georgia,serif;font-style:italic;font-size:18px;color:#3f2566;margin-top:2px;">Elks Care &#8212; Elks Share</div>
+                            </div>
+                            <div style="background:#f7efd6;border-top:2px solid #c9a227;color:#3f2566;padding:5px 16px;font-family:Arial,sans-serif;font-weight:bold;font-size:13px;">
+                                <span style="float:left;" data-elks-field="issue_month_year">July 2026</span>
+                                <span style="float:right;" data-elks-field="issue_ref">Volume 120, No. 7</span>
+                                <span style="display:block;text-align:center;" data-elks-field="city_state">Lewiston, Idaho</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_message o_mail_snippet_general pt16 pb16 o_elks_officer_exalted_ruler" data-name="Message Block">
+                        <div class="container" style="border:2px solid #3f2566;border-radius:10px;padding:12px 16px;">
+                            <h1 class="s_elks_msg_title" style="font-family:Arial,sans-serif;font-weight:900;color:#000000;font-size:34px;line-height:1;margin:0 0 10px;">Officer's Message</h1>
+                            <div class="row">
+                                <div class="col-md-8 col-12">
+                                    <p style="text-align:justify;">Replace this with your message for the month. Use the <b>Officer</b> dropdown in the Style panel to choose whose message this is.</p>
+                                </div>
+                                <div class="col-md-4 col-12 s_elks_msg_byline" style="text-align:center;">
+                                    <div style="width:100%;max-width:150px;height:150px;background:#8b8b8b;border:1px solid #555555;margin:0 auto;"></div>
+                                    <p style="font-family:Arial,sans-serif;font-weight:bold;color:#000000;margin-top:6px;">Officer Name<br/><span style="font-weight:normal;font-style:italic;color:#3f2566;">Title</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_section_bar o_mail_snippet_general pt8 pb8" data-name="Section Bar">
+                        <div class="container">
+                            <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;font-size:18px;padding:4px 8px;border-radius:3px;">Around the Lodge</div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_new_members o_mail_snippet_general pt8 pb8" data-name="New Members (Dynamic)">
+                        <div class="container" style="padding:2px 0;">
+                            <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Welcome Our New Members</div>
+                            <div data-elks-block="new_members"><p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills at print.</p></div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_project_dollars o_mail_snippet_general pt8 pb8" data-name="Project Dollars (Dynamic)">
+                        <div class="container" style="padding:2px 0;">
+                            <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Project Dollars</div>
+                            <div data-elks-block="project_dollars"><p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills at print.</p></div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_charity o_mail_snippet_general pt8 pb8" data-name="Charity Report (Dynamic)">
+                        <div class="container" style="padding:2px 0;">
+                            <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Charity &amp; Community Service</div>
+                            <div data-elks-block="charity"><p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills at print.</p></div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_officers o_mail_snippet_general pt8 pb8" data-name="Officers">
+                        <div class="container" style="padding:2px 0;">
+                            <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:6px;">Lodge Officers</div>
+                            <div data-elks-block="officers"><p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills at print.</p></div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_calendar o_mail_snippet_general pt8 pb8" data-name="Lodge Calendar (Dynamic)">
+                        <div class="container" style="padding:2px 0;">
+                            <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Lodge Calendar</div>
+                            <div data-elks-block="calendar"><p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills at print.</p></div>
+                        </div>
+                    </section>
+
+                    <section class="s_elks_mailing o_mail_snippet_general pt8 pb8" data-name="Mailing Panel">
+                        <div class="container">
+                            <div class="row">
+                                <div class="col-md-8 col-12">
+                                    <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.35;color:#111;"><b>LEWISTON ELKS LODGE</b><br/>B.P.O.E. #896<br/>3444 Country Club Drive<br/>Lewiston, Idaho 83501<br/>Office: (208) 743-5591 &#183; Fax: (208) 743-5592<br/>Elksbpoe896@lewiston.com</div>
+                                </div>
+                                <div class="col-md-4 col-12">
+                                    <div style="border:2px solid #000000;padding:8px 12px;text-align:center;font-family:Arial,sans-serif;font-size:11px;line-height:1.35;">Non-Profit Organization<br/>U.S. Postage<br/><b style="font-size:15px;letter-spacing:3px;">PAID</b><br/>Lewiston, Idaho 83501<br/>Permit No. 46</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                 </div>
             </div>
         </field>

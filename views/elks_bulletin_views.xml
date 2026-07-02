@@ -17,15 +17,20 @@
         <field name="arch" type="xml">
             <form string="Newsletter">
                 <header>
+                    <button name="action_preview_pdf" type="object"
+                            string="Preview" class="btn-secondary"
+                            icon="fa-eye"/>
                     <button name="action_print_pdf" type="object"
                             string="Print / Download PDF" class="btn-primary"
                             icon="fa-file-pdf-o"/>
                     <button name="action_mark_final" type="object"
                             string="Mark Final"
-                            invisible="state == 'final'"/>
+                            invisible="state == 'final'"
+                            groups="elksbulletin.group_elksbulletin_manager"/>
                     <button name="action_reset_draft" type="object"
                             string="Reset to Draft"
-                            invisible="state == 'draft'"/>
+                            invisible="state == 'draft'"
+                            groups="elksbulletin.group_elksbulletin_manager"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,final"/>
                 </header>

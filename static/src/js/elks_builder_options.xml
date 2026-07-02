@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     The controls shown in the editor's Style panel for Lodge blocks: a Width
+     picker (Full / Two-Thirds / Half / One-Third) for data blocks, and an Officer
+     picker on the Message Block. Their JavaScript lives in elks_builder_options.js.
+     === AI AGENT ===
+     Owl templates for the option components (t-name must match each component's
+     static template). They use the declarative html_builder widgets (BuilderRow /
+     BuilderSelect / BuilderSelectItem), which are globally available in the
+     builder — no imports in the XML. Width uses classAction (o_elks_w_*, styled
+     in the report + editor CSS); Officer uses classAction (o_elks_officer_<pos>,
+     read at print by elks.bulletin.issue._render_print_body). Classes, not
+     data-attributes, so they survive the mass_mailing email inliner. Loaded via
+     the mass_mailing.assets_builder bundle (manifest).
+     ===================================================================== -->
+<templates xml:space="preserve">
+
+    <t t-name="elksbulletin.SizeOption">
+        <BuilderRow label.translate="Width">
+            <BuilderSelect>
+                <BuilderSelectItem classAction="'o_elks_w_full'">Full width</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_w_23'">Two-Thirds (2/3)</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_w_12'">Half (1/2)</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_w_13'">One-Third (1/3)</BuilderSelectItem>
+            </BuilderSelect>
+        </BuilderRow>
+    </t>
+
+    <t t-name="elksbulletin.MessageOption">
+        <BuilderRow label.translate="Officer">
+            <BuilderSelect>
+                <BuilderSelectItem classAction="'o_elks_officer_exalted_ruler'">Exalted Ruler</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_officer_leading_knight'">Leading Knight</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_officer_loyal_knight'">Loyal Knight</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_officer_lecturing_knight'">Lecturing Knight</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_officer_secretary'">Secretary</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_officer_treasurer'">Treasurer</BuilderSelectItem>
+            </BuilderSelect>
+        </BuilderRow>
+    </t>
+
+</templates>

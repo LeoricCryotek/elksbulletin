@@ -7,7 +7,8 @@
      (loaded first per the manifest order).
      ===================================================================== -->
 <odoo>
-    <menuitem id="menu_elksbulletin_root" name="Newsletter" sequence="90"/>
+    <menuitem id="menu_elksbulletin_root" name="Newsletter" sequence="90"
+              groups="elksbulletin.group_elksbulletin_editor"/>
 
     <menuitem id="menu_elksbulletin_issues" name="Newsletters"
               parent="menu_elksbulletin_root"
@@ -15,5 +16,6 @@
 
     <menuitem id="menu_elksbulletin_templates" name="Templates"
               parent="menu_elksbulletin_root"
-              action="action_elks_bulletin_template" sequence="20"/>
+              action="action_elks_bulletin_template" sequence="20"
+              groups="elksbulletin.group_elksbulletin_manager"/>
 </odoo>

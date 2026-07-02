@@ -14,14 +14,18 @@
 # If the charter date isn't set in FRS, charter_missing flags a form banner.
 # New records copy the default template body into body_html (create override).
 # =============================================================================
+import base64
 import calendar as _calmod
+import logging
 from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
-from lxml import html as lxml_html
-from markupsafe import Markup
+from lxml import etree, html as lxml_html
+from markupsafe import Markup, escape as markup_escape
 
 from odoo import api, fields, models, _
+
+_logger = logging.getLogger(__name__)
 
 # Month selection for the "New Members" block source window.
 NEW_MEMBER_MONTHS = [
@@ -30,6 +34,16 @@ NEW_MEMBER_MONTHS = [
     ("04", "April"), ("05", "May"), ("06", "June"),
     ("07", "July"), ("08", "August"), ("09", "September"),
     ("10", "October"), ("11", "November"), ("12", "December"),
+]
+
+# Display order for the Lodge Officers roster (elks.officer.term positions).
+OFFICER_ORDER = [
+    "exalted_ruler", "leading_knight", "loyal_knight", "lecturing_knight",
+    "secretary", "treasurer", "tiler", "esquire", "chaplain", "inner_guard",
+    "organist", "pianist", "sergeant_at_arms", "presiding_justice",
+    "boardchair", "trustee1y", "trustee2y", "trustee3y", "trustee4y",
+    "trustee5y", "assistant_secretary", "assistant_treasurer", "house_chair",
+    "activities_chair", "membership_chair", "lodge_advisor",
 ]
 
 
@@ -94,6 +108,25 @@ class ElksBulletinIssue(models.Model):
         related="lodge_settings_id.name", readonly=True)
     lodge_number = fields.Char(
         related="lodge_settings_id.lodge_number", readonly=True)
+    city_state = fields.Char(
+        "City / State", compute="_compute_city_state",
+        help="Lodge city and state for the masthead, from FRS lodge settings.")
+
+    # === AI AGENT ===
+    # "City, State" for the masthead, built from FRS lodge_city + the label of the
+    # lodge_state selection. Falls back to Lewiston, Idaho if settings are unset.
+    @api.depends("lodge_settings_id.lodge_city", "lodge_settings_id.lodge_state")
+    def _compute_city_state(self):
+        for rec in self:
+            city = state = ""
+            s = rec.lodge_settings_id
+            if s:
+                city = s.lodge_city or ""
+                if s.lodge_state and "lodge_state" in s._fields:
+                    sel = dict(s._fields["lodge_state"].selection or [])
+                    state = sel.get(s.lodge_state, s.lodge_state)
+            rec.city_state = ", ".join(
+                p for p in (city, state) if p) or "Lewiston, Idaho"
 
     # --- computed masthead numbering -------------------------------------
     # NOTE: Odoo 19 warns if one compute method feeds both stored and
@@ -210,6 +243,46 @@ class ElksBulletinIssue(models.Model):
                  else "elksbulletin.action_report_bulletin_letter")
         return self.env.ref(xmlid).report_action(self)
 
+    # === HUMAN ===
+    # "Preview" opens the finished newsletter PDF in a new browser tab (inline)
+    # so you can see exactly how it breaks across pages before you download it.
+    # === AI AGENT ===
+    # Renders the same report (WeasyPrint via the ir.actions.report override),
+    # stores it as an attachment, and returns an act_url with download=false so
+    # the browser shows the PDF inline rather than downloading it. Prior preview
+    # attachments for this issue are removed first so they don't accumulate.
+    PREVIEW_ATTACHMENT_TAG = "elksbulletin_preview"
+
+    def action_preview_pdf(self):
+        self.ensure_one()
+        xmlid = ("elksbulletin.action_report_bulletin_legal"
+                 if self.page_size == "legal"
+                 else "elksbulletin.action_report_bulletin_letter")
+        report = self.env.ref(xmlid)
+        pdf_content, _type = report._render_qweb_pdf(
+            report.report_name, self.ids)
+        Attachment = self.env["ir.attachment"].sudo()
+        # Drop any earlier preview for this issue to avoid pile-up.
+        Attachment.search([
+            ("res_model", "=", self._name),
+            ("res_id", "=", self.id),
+            ("description", "=", self.PREVIEW_ATTACHMENT_TAG),
+        ]).unlink()
+        attachment = Attachment.create({
+            "name": f"{self.name or 'Newsletter'} (preview).pdf",
+            "type": "binary",
+            "datas": base64.b64encode(pdf_content),
+            "res_model": self._name,
+            "res_id": self.id,
+            "description": self.PREVIEW_ATTACHMENT_TAG,
+            "mimetype": "application/pdf",
+        })
+        return {
+            "type": "ir.actions.act_url",
+            "url": f"/web/content/{attachment.id}?download=false",
+            "target": "new",
+        }
+
     # ==================================================================
     # Dynamic content — filled in at render time
     # ==================================================================
@@ -251,12 +324,21 @@ class ElksBulletinIssue(models.Model):
     def _render_print_body(self):
         self.ensure_one()
         html = self.body_html or self.body_arch or ""
-        if not html or "data-elks-block" not in html:
-            return Markup(html or "")
+        if not html.strip():
+            return Markup("")
+        # Guard: a resolver error must never take down the whole PDF/report.
         try:
-            frag = lxml_html.fragment_fromstring(html, create_parent="div")
+            return self._render_print_body_inner(html)
         except Exception:
+            _logger.warning(
+                "elksbulletin: print body render failed; using raw body.",
+                exc_info=True)
             return Markup(html)
+
+    def _render_print_body_inner(self, html):
+        frag = lxml_html.fragment_fromstring(html, create_parent="div")
+
+        # 1) Fill dynamic blocks (data-elks-block markers).
         for el in frag.xpath('.//*[@data-elks-block]'):
             key = el.get("data-elks-block")
             inner = self._dynamic_block_html(key)
@@ -272,6 +354,178 @@ class ElksBulletinIssue(models.Model):
                     el.text = (el.text or "") + node
                 else:
                     el.append(node)
+
+        # 1b) Fill masthead dynamic fields (data-elks-field markers) so the
+        #     masthead reflects THIS issue (month, Volume/No., lodge, logo)
+        #     instead of the static placeholder.
+        field_values = {
+            "lodge_name": getattr(self, "lodge_name", "") or "",
+            "lodge_number": getattr(self, "lodge_number", "") or "",
+            "city_state": getattr(self, "city_state", "") or "",
+            "issue_ref": getattr(self, "issue_ref", "") or "",
+            "issue_month_year": (self.issue_date.strftime("%B %Y")
+                                 if self.issue_date else ""),
+        }
+        for el in frag.xpath(".//*[@data-elks-field]"):
+            key = el.get("data-elks-field")
+            if key == "logo_lodge":
+                if self.lodge_logo:
+                    el.set("src", "data:image/png;base64,"
+                           + self.lodge_logo.decode())
+                    el.set("style", (el.get("style") or "").replace(
+                        "display:none", "").replace("display: none", ""))
+                elif el.getparent() is not None:
+                    el.getparent().remove(el)
+                continue
+            if key in field_values:
+                for child in list(el):
+                    el.remove(child)
+                el.text = field_values[key]
+
+        # 1c) Message Blocks: a section carrying an o_elks_officer_<position>
+        #     class (set by the Style-panel Officer dropdown) gets its title set
+        #     and its byline (photo/name/title) filled from that officer for this
+        #     lodge year. A class is used (not a data-attribute) because classes
+        #     reliably survive the email inliner. The message body stays editable.
+        msg_t = ("contains(concat(' ', normalize-space(@class), ' '),"
+                 " ' s_elks_msg_title ')")
+        msg_b = ("contains(concat(' ', normalize-space(@class), ' '),"
+                 " ' s_elks_msg_byline ')")
+        for sec in frag.xpath(".//*[contains(@class, 'o_elks_officer_')]"):
+            position = next(
+                (c[len("o_elks_officer_"):]
+                 for c in (sec.get("class") or "").split()
+                 if c.startswith("o_elks_officer_")),
+                "exalted_ruler")
+            for title in sec.xpath(f".//*[{msg_t}]"):
+                for c in list(title):
+                    title.remove(c)
+                title.text = f"Message from the {self._officer_label(position)}"
+            for byl in sec.xpath(f".//*[{msg_b}]"):
+                inner = self._officer_byline_html(position)
+                for c in list(byl):
+                    byl.remove(c)
+                byl.text = None
+                try:
+                    nodes = lxml_html.fragments_fromstring(inner)
+                except Exception:
+                    nodes = [inner]
+                for node in nodes:
+                    if isinstance(node, str):
+                        byl.text = (byl.text or "") + node
+                    else:
+                        byl.append(node)
+
+        # 2) Flatten the mass_mailing wrapper table into a plain div. All the
+        #    sections normally live in ONE <td class="o_mail_wrapper_td">, and
+        #    wkhtmltopdf ignores page-break CSS inside a table cell. Moving them
+        #    to a block-level div makes page-breaks work. No-op if absent.
+        td_xpath = (".//*[contains(concat(' ', normalize-space(@class), ' '),"
+                    " ' o_mail_wrapper_td ')]")
+        for td in frag.xpath(td_xpath):
+            table = td
+            while table is not None and table.tag != "table":
+                table = table.getparent()
+            if table is None or table.getparent() is None:
+                continue
+            holder = etree.Element("div")
+            holder.set("class", "o_mail_print_wrapper")
+            for child in list(td):
+                holder.append(child)
+            table.getparent().replace(table, holder)
+
+        # 3) Force the manual "Page Break" blocks. An inline page-break-after is
+        #    the most reliably honored by wkhtmltopdf.
+        pb_xpath = (".//*[contains(concat(' ', normalize-space(@class), ' '),"
+                    " ' s_elks_page_break ')]")
+        for pb in frag.xpath(pb_xpath):
+            style = (pb.get("style") or "").rstrip("; ")
+            pb.set("style", (style + ";" if style else "")
+                   + "break-after:page;page-break-after:always;display:block;")
+
+        # 4) Tag the element that directly holds the snippet sections so the
+        #    print stylesheet can flow it in newspaper columns (full-width
+        #    blocks opt out via column-span:all).
+        sects = frag.xpath(
+            ".//*[contains(concat(' ', normalize-space(@class), ' '),"
+            " ' o_mail_snippet_general ')]")
+        if sects:
+            parent = sects[0].getparent()
+            if parent is not None:
+                cls = (parent.get("class") or "").strip()
+                parent.set("class", (cls + " o_elks_print_flow").strip())
+
+        # 4b) Group consecutive same-row SIZED siblings (o_elks_w_23/_12/_13)
+        #     into a shared break-inside:avoid wrapper. Without this, WeasyPrint
+        #     can push one sibling in a side-by-side row to the next page while
+        #     its row-partner stays behind (break-inside:avoid is only ever set
+        #     per-block, never on the row as a unit), splitting the row across
+        #     the page boundary. Row membership is approximated the same way
+        #     inline-block actually wraps: sum declared widths and start a new
+        #     row once the running total would exceed 100%. Full-width /
+        #     unsized blocks are never inline-block, so they always reset the run.
+        ROW_WIDTH_PCT = {"o_elks_w_23": 66, "o_elks_w_12": 49.6, "o_elks_w_13": 33}
+        if sects:
+            parent = sects[0].getparent()
+            if parent is not None:
+                children = list(parent)
+                i = 0
+                while i < len(children):
+                    el = children[i]
+                    width_cls = next(
+                        (c for c in (el.get("class") or "").split()
+                         if c in ROW_WIDTH_PCT), None)
+                    if width_cls is None:
+                        i += 1
+                        continue
+                    run = [el]
+                    running = ROW_WIDTH_PCT[width_cls]
+                    j = i + 1
+                    while j < len(children):
+                        nxt = children[j]
+                        nxt_cls = next(
+                            (c for c in (nxt.get("class") or "").split()
+                             if c in ROW_WIDTH_PCT), None)
+                        if nxt_cls is None or running + ROW_WIDTH_PCT[nxt_cls] > 100.5:
+                            break
+                        run.append(nxt)
+                        running += ROW_WIDTH_PCT[nxt_cls]
+                        j += 1
+                    if len(run) > 1:
+                        wrapper = etree.Element(
+                            "div", style="break-inside:avoid;"
+                                          "page-break-inside:avoid;")
+                        run[0].addprevious(wrapper)
+                        for node in run:
+                            wrapper.append(node)
+                    i = j
+
+        # 5) Mark "story" flow text (Message Block / Two-Thirds+One-Third /
+        #    Three Columns body columns, tagged .s_elks_story_flow in the
+        #    snippets) with stable per-child ids. The report's second WeasyPrint
+        #    pass (ir_actions_report._bulletin_insert_continuation_markers) uses
+        #    these ids to find exactly which child landed on which printed page,
+        #    so it can auto-insert "Continued on page #" / "(Continued from
+        #    page #)" bars at the real break point instead of a guess.
+        flow_xpath = (".//*[contains(concat(' ', normalize-space(@class), ' '),"
+                      " ' s_elks_story_flow ')]")
+        flow_counter = 0
+        for flow in frag.xpath(flow_xpath):
+            for child in flow:
+                if not isinstance(child.tag, str):
+                    continue  # skip comments/PIs
+                if "s_elks_page_break" in (child.get("class") or ""):
+                    # Deliberate breaks (incl. s_elks_page_break_inline) are not
+                    # flow text. Leaving them un-id'd makes the marker pass pair
+                    # the paragraphs AROUND the break, so "Continued on page #"
+                    # is spliced after the last paragraph BEFORE the break
+                    # (bottom of the earlier page) rather than after the break
+                    # element itself (top of the new page).
+                    continue
+                if not child.get("id"):
+                    child.set("id", f"elks-flow-{flow_counter}")
+                    flow_counter += 1
+
         return Markup(
             "".join(lxml_html.tostring(c, encoding="unicode")
                     for c in frag)
@@ -286,6 +540,9 @@ class ElksBulletinIssue(models.Model):
             "delinquents": self._html_delinquents,
             "charity": self._html_charity,
             "calendar": self._html_calendar,
+            "upcoming_events": self._html_upcoming_events,
+            "events": self._html_events,
+            "officers": self._html_officers,
         }
         builder = builders.get(key)
         if not builder:
@@ -300,6 +557,14 @@ class ElksBulletinIssue(models.Model):
     _PURPLE = "#5b3b8c"
     _PURPLE_DEEP = "#3f2566"
     _GOLD = "#c9a227"
+
+    @staticmethod
+    def _e(value):
+        """HTML-escape a dynamic value before injecting it into the HTML the
+        resolver builds. Lodge data (member names, event titles, descriptions)
+        can contain '&', '<', quotes, etc.; escaping keeps the markup valid so a
+        stray character can't break the render or inject markup."""
+        return str(markup_escape("" if value is None else value))
 
     # Small US flag (inline SVG) shown next to veteran members. SVG renders in
     # wkhtmltopdf, unlike color emoji.
@@ -362,7 +627,7 @@ class ElksBulletinIssue(models.Model):
             age = int(mbr.x_age) if mbr.x_age else ""
             rows.append(
                 f'<tr><td style="padding:2px 6px;border-bottom:1px solid #ddd;">'
-                f'<b>{mbr.name or ""}</b>{self._vet_flag(mbr)}</td>'
+                f'<b>{self._e(mbr.name)}</b>{self._vet_flag(mbr)}</td>'
                 f'<td style="padding:2px 6px;border-bottom:1px solid #ddd;">'
                 f'{age}</td>'
                 f'<td style="padding:2px 6px;border-bottom:1px solid #ddd;">'
@@ -401,7 +666,7 @@ class ElksBulletinIssue(models.Model):
                 f'<td style="width:33%;text-align:center;vertical-align:top;'
                 f'padding:8px 4px;">{photo}'
                 f'<div style="font-family:Georgia,serif;font-weight:bold;'
-                f'font-size:13px;margin-top:4px;">{mbr.name or ""}'
+                f'font-size:13px;margin-top:4px;">{self._e(mbr.name)}'
                 f'{self._vet_flag(mbr)}</div>'
                 f'<div style="font-family:Arial,sans-serif;font-size:11px;'
                 f'color:#555;">{meta}</div></td>'
@@ -465,11 +730,120 @@ class ElksBulletinIssue(models.Model):
         )
 
     # === AI AGENT ===
-    # Month calendar grid for the issue month, populated from calendar.event —
-    # the SAME source as elks_calendar_publisher (the real lodge calendar), so it
-    # matches the published calendar. Inline-styled so it survives the email
-    # inliner into the print body.
+    # Upcoming APPROVED Project Events (elksevent project.task): board-approved
+    # events dated today or later. Shows Title, Description, Date.
+    def _html_upcoming_events(self):
+        today = fields.Date.context_today(self)
+        events = self.env["project.task"].sudo().search([
+            ("x_is_event", "=", True),
+            ("x_approval_state", "=", "approved"),
+            ("x_event_date", ">=", today),
+        ], order="x_event_date asc")
+        if not events:
+            return ('<p style="font-style:italic;color:#666;">'
+                    'No upcoming approved events.</p>')
+        rows = []
+        for evt in events:
+            # x_event_description is a plain Text field -> escape it.
+            desc = self._e((evt.x_event_description or "").strip())
+            desc_html = (
+                f'<div style="font-family:Arial,sans-serif;font-size:11px;'
+                f'color:#555;margin-top:1px;">{desc}</div>' if desc else "")
+            rows.append(
+                '<div style="margin:0 0 6px;padding-bottom:5px;'
+                'border-bottom:1px solid #e5dff0;">'
+                '<div><b style="font-family:Georgia,serif;font-size:13px;">'
+                f'{self._e(evt.name)}</b>'
+                f'<span style="float:right;font-family:Arial,sans-serif;'
+                f'font-size:11px;font-weight:bold;color:{self._PURPLE_DEEP};">'
+                f'{self._fmt_date(evt.x_event_date)}</span></div>'
+                f'{desc_html}</div>'
+            )
+        return "".join(rows)
+
+    # === AI AGENT ===
+    # The lodge's actual events from Odoo's Events app (event.event): upcoming
+    # events (start today or later). Shows name, date, and description (Html).
+    def _html_events(self):
+        now = fields.Datetime.now()
+        events = self.env["event.event"].sudo().search([
+            ("date_begin", ">=", now),
+        ], order="date_begin asc")
+        if not events:
+            return ('<p style="font-style:italic;color:#666;">'
+                    'No upcoming lodge events scheduled.</p>')
+        rows = []
+        for evt in events:
+            when = self._fmt_date(evt.date_begin.date()) if evt.date_begin else ""
+            # description is a rich-text Html field, so render it as-is (authored
+            # by lodge staff); only the plain-text name is escaped.
+            desc = (evt.description or "").strip() if evt.description else ""
+            desc_html = (
+                f'<div style="font-family:Arial,sans-serif;font-size:11px;'
+                f'color:#555;margin-top:1px;">{desc}</div>' if desc else "")
+            rows.append(
+                '<div style="margin:0 0 6px;padding-bottom:5px;'
+                'border-bottom:1px solid #e5dff0;">'
+                '<div><b style="font-family:Georgia,serif;font-size:13px;">'
+                f'{self._e(evt.name)}</b>'
+                f'<span style="float:right;font-family:Arial,sans-serif;'
+                f'font-size:11px;font-weight:bold;color:{self._PURPLE_DEEP};">'
+                f'{when}</span></div>{desc_html}</div>'
+            )
+        return "".join(rows)
+
+    # === HUMAN ===
+    # The Lodge Calendar block renders the SAME calendar the website publishes
+    # (elks_calendar_publisher), so the newsletter matches the website — theme,
+    # colors, emojis, event styling and all.
+    # === AI AGENT ===
+    # Prefer an existing elks.calendar.publication for the issue month/year and
+    # render its report_calendar_body template (exact website output). If none
+    # exists, render a throwaway new() publication with a stock theme. Any
+    # failure falls back to the simple built-in grid. Depends on
+    # elks_calendar_publisher (month/year are string selections '1'..'12'/'2026').
     def _html_calendar(self):
+        d = self.issue_date or fields.Date.context_today(self)
+        month, year = str(d.month), str(d.year)
+        try:
+            Pub = self.env["elks.calendar.publication"].sudo()
+            pub = Pub.search(
+                [("month", "=", month), ("year", "=", year)], limit=1)
+            body = None
+            if pub:
+                # Reuse the published calendar's own rendered HTML (same output
+                # as the website preview) — the proven path.
+                body = pub.preview_html
+            else:
+                Theme = self.env["elks.calendar.theme"].sudo()
+                theme = (Theme.search([("is_stock", "=", True)], limit=1)
+                         or Theme.search([], limit=1))
+                if theme:
+                    tmp = Pub.new({"month": month, "year": year,
+                                   "theme_id": theme.id})
+                    body = self.env["ir.qweb"]._render(
+                        "elks_calendar_publisher.report_calendar_body",
+                        {"pub": tmp})
+            body = str(body or "")
+            if body.strip() and "Preview unavailable" not in body:
+                # The publisher template wraps content in <main class="elks-cal">.
+                # A nested <main> inside the report's <main> is invalid HTML and
+                # can make WeasyPrint throw, so swap it for a <div> (keeping the
+                # class so the scoped styles still apply).
+                body = (body.replace('<main class="elks-cal">',
+                                     '<div class="elks-cal">')
+                            .replace("</main>", "</div>"))
+                return body
+        except Exception:
+            _logger.warning(
+                "elksbulletin: publisher calendar render failed; "
+                "using simple grid.", exc_info=True)
+        return self._html_calendar_simple()
+
+    # === AI AGENT ===
+    # Fallback month grid from calendar.event, used only if the publisher
+    # render is unavailable.
+    def _html_calendar_simple(self):
         d = self.issue_date or fields.Date.context_today(self)
         y, m = d.year, d.month
         _, last = _calmod.monthrange(y, m)
@@ -482,7 +856,7 @@ class ElksBulletinIssue(models.Model):
         for evt in events:
             sd = evt.start.date() if evt.start else False
             if sd and sd.year == y and sd.month == m:
-                by_day.setdefault(sd.day, []).append(evt.name or "Event")
+                by_day.setdefault(sd.day, []).append(self._e(evt.name or "Event"))
         dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         head = "".join(
             f'<th style="border:1px solid {self._PURPLE_DEEP};'
@@ -550,3 +924,83 @@ class ElksBulletinIssue(models.Model):
             f'your good work is recorded.</div>'
         )
         return totals + reminder
+
+    # === AI AGENT ===
+    # Byline (photo + name + title) for the officer holding <position> in this
+    # issue's lodge year, used by the Message Block. Photo from the officer term,
+    # else the member's avatar, else a grey placeholder.
+    def _officer_label(self, position):
+        Term = self.env["elks.officer.term"].sudo()
+        return dict(Term._fields["position"].selection).get(position, position)
+
+    def _officer_byline_html(self, position):
+        d = self.issue_date or fields.Date.context_today(self)
+        y, m = d.year, d.month
+        lodge_year = f"{y}-{y + 1}" if m >= 4 else f"{y - 1}-{y}"
+        Term = self.env["elks.officer.term"].sudo()
+        label = self._officer_label(position)
+        term = Term.search([
+            ("position", "=", position),
+            ("lodge_year", "=", lodge_year),
+            ("active", "=", True),
+        ], limit=1)
+        name, img = "", False
+        if term:
+            name = term.partner_id.name or ""
+            img = term.image_1920 or (
+                term.partner_id.image_512 or term.partner_id.image_1920
+                if term.partner_id else False)
+        if img:
+            photo = (f'<img src="data:image/png;base64,{img.decode()}" '
+                     f'style="width:100%;max-width:150px;object-fit:cover;'
+                     f'border:1px solid #555555;"/>')
+        else:
+            photo = ('<div style="width:100%;max-width:150px;height:150px;'
+                     'background:#8b8b8b;border:1px solid #555555;'
+                     'margin:0 auto;"></div>')
+        return (
+            f'<div style="text-align:center;">{photo}'
+            f'<p style="font-family:Arial,sans-serif;font-weight:bold;'
+            f'color:#000000;margin-top:6px;">{self._e(name)}<br/>'
+            f'<span style="font-weight:normal;font-style:italic;'
+            f'color:#3f2566;">{self._e(label)}</span></p></div>'
+        )
+
+    # === AI AGENT ===
+    # Lodge Officers roster from elks.officer.term for THIS issue's lodge year
+    # (Apr–Mar), ordered by office, rendered as a two-column list.
+    def _html_officers(self):
+        d = self.issue_date or fields.Date.context_today(self)
+        y, m = d.year, d.month
+        lodge_year = f"{y}-{y + 1}" if m >= 4 else f"{y - 1}-{y}"
+        Term = self.env["elks.officer.term"].sudo()
+        terms = Term.search([
+            ("lodge_year", "=", lodge_year),
+            ("active", "=", True),
+        ])
+        if not terms:
+            return ('<p style="font-style:italic;color:#666;">'
+                    f'Officer roster for {lodge_year} is not set yet.</p>')
+        pos_labels = dict(Term._fields["position"].selection)
+        order = {p: i for i, p in enumerate(OFFICER_ORDER)}
+        terms = terms.sorted(key=lambda t: order.get(t.position, 999))
+        cells = [
+            f'<b>{self._e(pos_labels.get(t.position, t.position))}</b> — '
+            f'{self._e(t.partner_id.name)}'
+            for t in terms
+        ]
+        half = (len(cells) + 1) // 2
+        left, right = cells[:half], cells[half:]
+        rows = []
+        for i in range(half):
+            lft = left[i] if i < len(left) else ""
+            rgt = right[i] if i < len(right) else ""
+            rows.append(
+                '<tr>'
+                f'<td style="padding:1px 8px;font-family:Arial,sans-serif;'
+                f'font-size:12px;width:50%;">{lft}</td>'
+                f'<td style="padding:1px 8px;font-family:Arial,sans-serif;'
+                f'font-size:12px;width:50%;">{rgt}</td></tr>'
+            )
+        return ('<table style="width:100%;border-collapse:collapse;">'
+                + "".join(rows) + "</table>")

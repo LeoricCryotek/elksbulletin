@@ -37,48 +37,72 @@ page-sized document (US Letter / Legal). It does NOT send email.
 
 ## Current state (built + compiles clean)
 
-- `models/elks_bulletin_issue.py` — `elks.bulletin.issue` (mail.thread): name,
-  issue_date, page_size, template_id, state, body_arch/body_html/mailing_model_id,
-  FRS related fields, computed volume/issue_number/issue_ref/charter_missing,
-  create() template-copy, action_mark_final/reset_draft.
+**Models**
+- `models/elks_bulletin_issue.py` — `elks.bulletin.issue` (mail.thread). Fields:
+  name, issue_date, page_size, template_id, state, body_arch/body_html/
+  mailing_model_id, new_member_month/new_member_photos (dynamic-block settings),
+  FRS related fields (lodge_name/number/logo/charter, computed city_state),
+  computed volume/issue_number/issue_ref/charter_missing. Actions: print/preview
+  PDF, mark final/reset. **Render-time resolver** `_render_print_body()` (guarded)
+  fills dynamic blocks + masthead fields + officer bylines, flattens the email
+  wrapper table, and tags the section flow. All built HTML is escaped via `_e()`.
+- `models/ir_actions_report.py` — inherits `ir.actions.report`; renders the two
+  bulletin reports with **WeasyPrint** (real CSS paged media: `@page`, page
+  numbers, `break-inside: avoid`, per-block width). Falls back to wkhtmltopdf
+  only if WeasyPrint isn't installed (errors surface, not silently masked).
 - `models/elks_bulletin_template.py` — `elks.bulletin.template` (name, is_default,
-  same body trio).
-- `data/bulletin_template_data.xml` — seeds default "Lodge Newsletter" template.
-- `views/snippets/elks_bulletin_snippets.xml` — **8 Lodge blocks** in a new
-  "Lodge" category: Masthead, Section Bar, Exalted Ruler Message (2/3+1/3),
-  In Memoriam, Lodge Officers, Two-Thirds+One-Third, Three Columns, Continued.
-- `views/elks_bulletin_views.xml` — issue + template forms (mass_mailing_html
-  editor), lists, actions. `views/elks_bulletin_menus.xml` — Newsletter app menu.
-- `security/ir.model.access.csv`, `static/description/icon.png` (+ icon.svg).
-- Every file uses the **HUMAN / AI AGENT comment banner** standard.
+  body trio). New issues copy the default template's body.
+
+**Dynamic blocks (auto-fill at print, `data-elks-block` / class markers):**
+New Members (name/age/init/vet flag), Project Dollars (FRS FY from elkssecretary),
+Dues (aggregate counts), Charity (elkscharity totals + reminder), Lodge Calendar
+(renders the elks_calendar_publisher calendar, scaled to fit), Upcoming Events
+(approved elksevent project.tasks), Events (Odoo event.event), Officer Roster
+(elks.officer.term), Message Block (officer byline auto-fill; Style-panel Officer
+picker), plus static Masthead / Section Bar / In Memoriam / Mailing Panel /
+layout blocks / Page Break / Continued.
+
+**Editor**
+- `static/src/js/elks_builder_options.js` + `.xml` — Style-panel options: Width
+  (Full/⅔/½/⅓ via `o_elks_w_*` classes) and Officer (via `o_elks_officer_*`).
+- `static/src/scss/newsletter_paper_canvas.scss` — paper-size editing canvas +
+  printable-area overlay + width classes (loaded in the mass_mailing iframe).
+- `static/src/img/snippets_thumbs/*.svg` — block icons.
+
+**Views / security / data**
+- `views/*` — issue + template forms, lists, menus (scoped to the groups below).
+- `security/elks_bulletin_groups.xml` — **Editor** and **Publisher** groups;
+  `ir.model.access.csv` (Editor: no delete; Publisher: full).
+- `data/bulletin_template_data.xml` — branded starter template.
+- Every production file uses the **HUMAN / AI AGENT comment banner** standard.
 
 ## Deploy (local dev)
 ```
+# WeasyPrint must be installed in the SAME python that runs Odoo:
+#   brew install pango ; <odoo-python> -m pip install weasyprint
 cd /Users/dannyadmin/Documents/odoo/odoo19
-python3 odoo-bin -d <your_db> -u elksbulletin --stop-after-init
+python3 odoo-bin -c odoo/odoo.conf -u elksbulletin
 ```
-then restart the server. (Model/view/snippet changes need `-u`; controller-only
-changes just need a restart.)
+Python changes need a **process restart** (`-u` from the CLI restarts); XML/SCSS-
+only changes can use the Apps > Upgrade button. Editing is done in **Chrome**
+(the mass_mailing editor's block-preview iframe hangs in Firefox).
 
 ## Open work (task board)
 
-1. **Print/PDF export sized to page** (Letter/Legal) + pagination + Continue-to-
-   page splitting + page-number footer + no content bleed. (The mockups
-   `clms/Lodge_Newsletter_Mockup_v3.html` show the target print look.)
-2. **Dynamic New Members + Calendar blocks** — auto-fill from lodge Odoo.
-   **BLOCKED:** need the GitHub module folder name(s) for (1) members / new
-   members and (2) events / calendar. Read-only; other threads own those modules.
-3. **Builder option plugins** — per-block Style-panel toggles for size
-   (1/3, 2/3, 3/3, invalid sizes disabled per block) and framing (box / no box).
-   Currently shipped as fixed layout variants.
-4. **Masthead auto-fill** — real `logo_lodge` + computed Volume/No. injected at
-   render time (currently branded static placeholders in the snippet).
-5. Optional: scope Lodge blocks to the newsletter editor only (JS patch).
+1. **Free-form grid layout** (chosen next): enable Odoo's html_builder `gridLayout`
+   in the newsletter by registering a `LayoutOption`-named option on the layout
+   blocks, injecting the grid CSS into the editor iframe + WeasyPrint report, and
+   printing from `body_arch` (raw grid markup) instead of the email-inlined
+   `body_html`. Large, editor-JS heavy, only testable live in Chrome.
+2. **Scope Lodge blocks to this editor only** (they also show in Email Marketing).
+   Deferred: a separate snippet set collides in the builder; needs a filter/patch.
+3. Automated tests.
 
-## Reference mockups (in clms/)
-`Lodge_Newsletter_Mockup_v3.html` (target print look), `FRS_Charter_Date_Prompt.md`
-(the FRS field hand-off — already done by the elksfrs thread).
-
-## Companion modules (other threads own these — read-only here)
-- `elksfrs` — lodge settings/logo/charter (field already added).
-- `elksattendance` — unrelated (attendance), also in this workspace.
+## Companion modules (read-only from here; other threads own them)
+- `elksfrs` — lodge settings/logo/charter/fiscal-year.
+- `elkscontacts` — members (new-member/dues/veteran), `elks.officer.term`.
+- `elkssecretary` — `elks.meeting.money` (Project Dollars).
+- `elkscharity` — `elks.charity.contribution`.
+- `elksevent` — `project.task` events; `elks_calendar_publisher` — the calendar.
+- Note: a `%(xmlid)d`-in-context bug in elksevent's actions was fixed here (it
+  broke the web client in Odoo 19).

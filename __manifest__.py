@@ -44,10 +44,13 @@ page-sized document (US Letter / Legal) instead of an email.
         "elkscontacts",   # members: new-member + delinquent-dues blocks
         "elkssecretary",  # meeting money: Project Dollars totals
         "elkscharity",    # charity contributions: charity-report totals
-        "elksevent",      # events project.task (kept for lodge event data)
-        "calendar",       # calendar.event: Lodge Calendar block source
+        "elksevent",      # project.task events: Upcoming Events (approved)
+        "calendar",       # calendar.event: Lodge Calendar fallback source
+        "elks_calendar_publisher",  # Lodge Calendar block = the published calendar
+        "event",          # event.event: Events block (Odoo Events app)
     ],
     "data": [
+        "security/elks_bulletin_groups.xml",
         "security/ir.model.access.csv",
         "data/bulletin_template_data.xml",
         "report/elks_bulletin_report.xml",
@@ -61,6 +64,11 @@ page-sized document (US Letter / Legal) instead of an email.
         # so only this module's editor is affected.
         "mass_mailing.assets_inside_builder_iframe": [
             "elksbulletin/static/src/scss/newsletter_paper_canvas.scss",
+        ],
+        # Style-panel option controls (Width + Officer) for Lodge blocks.
+        "mass_mailing.assets_builder": [
+            "elksbulletin/static/src/js/elks_builder_options.js",
+            "elksbulletin/static/src/js/elks_builder_options.xml",
         ],
     },
     "installable": True,

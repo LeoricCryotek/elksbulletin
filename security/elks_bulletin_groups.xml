@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =====================================================================
+     === HUMAN ===
+     Two roles for the Lodge Newsletter: Editor (build and edit issues) and
+     Publisher (also mark final and delete). Keeps random staff from deleting
+     newsletters — assign the secretary/communications people to a role.
+     === AI AGENT ===
+     Odoo 19 groups: res.groups.privilege + two res.groups (Editor implies
+     base.group_user; Publisher implies Editor). Access rights in
+     ir.model.access.csv are keyed to these groups (Editor: no unlink;
+     Publisher: full). Admin is seeded into Publisher so nothing locks out.
+     Loaded before ir.model.access.csv in the manifest.
+     ===================================================================== -->
+<odoo>
+    <data noupdate="1">
+
+        <record id="privilege_elksbulletin" model="res.groups.privilege">
+            <field name="name">Lodge Newsletter</field>
+            <field name="category_id" ref="base.module_category_marketing"/>
+        </record>
+
+        <record id="group_elksbulletin_editor" model="res.groups">
+            <field name="name">Editor</field>
+            <field name="privilege_id" ref="privilege_elksbulletin"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+
+        <record id="group_elksbulletin_manager" model="res.groups">
+            <field name="name">Publisher</field>
+            <field name="privilege_id" ref="privilege_elksbulletin"/>
+            <field name="sequence">10</field>
+            <field name="implied_ids" eval="[(4, ref('group_elksbulletin_editor'))]"/>
+            <field name="user_ids" eval="[(4, ref('base.user_admin'))]"/>
+        </record>
+
+    </data>
+</odoo>

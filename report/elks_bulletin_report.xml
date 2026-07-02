@@ -85,6 +85,9 @@
     </template>
 
     <!-- ================= Shared document template ================= -->
+    <!-- Rendered by WeasyPrint (see models/ir_actions_report.py) which supports
+         real CSS paged media: @page size/margins + margin-box footer, CSS
+         multicol with column-span, and break-inside: avoid. -->
     <template id="report_bulletin_document">
         <t t-call="web.html_container">
             <t t-foreach="docs" t-as="doc">
@@ -93,63 +96,118 @@
                      t-att-data-oe-id="doc and doc.id"
                      t-att-data-oe-lang="doc and doc.env.context.get('lang')">
 
-                    <!-- Print CSS scoped into the rendered body -->
                     <style>
-                        /* Widen the mass_mailing email container to the full page */
-                        .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
-                        * { box-sizing: border-box; }
-                        img { max-width: 100% !important; height: auto; }
-                        /* Never split a block across a page: if the block can't
-                           fit in what's left of the page, push the WHOLE block to
-                           the next page (a break is effectively inserted before
-                           it). Applied broadly so it survives the email inliner. */
-                        .o_mail_snippet_general,
-                        .o_mail_snippet_general > .container,
-                        section[class*="s_elks_"],
-                        section[class*="s_elks_"] > .container {
-                            page-break-inside: avoid !important;
-                            -webkit-column-break-inside: avoid;
-                            break-inside: avoid;
+                        /* -------- Page + running footer (page numbers) -------- */
+                        @page {
+                            size: <t t-esc="'8.5in 14in' if doc.page_size == 'legal' else '8.5in 11in'"/>;
+                            margin: 0.5in 0.5in 0.62in 0.5in;
+                            @bottom-left {
+                                content: "<t t-esc="doc.lodge_name or 'Lewiston Elks Lodge'"/> No. <t t-esc="doc.lodge_number or ''"/> \00B7 B.P.O.E.";
+                                font: 8.5pt Arial, sans-serif; color: #3f2566;
+                            }
+                            @bottom-center {
+                                content: "Page " counter(page) " of " counter(pages);
+                                font: bold 8.5pt Arial, sans-serif; color: #3f2566;
+                            }
+                            @bottom-right {
+                                content: "<t t-esc="doc.issue_date.strftime('%B %Y') if doc.issue_date else ''"/>";
+                                font: 8.5pt Arial, sans-serif; color: #3f2566;
+                            }
                         }
-                        /* Author-controlled page break: the "Continued On Page" block */
-                        section.s_elks_continued { page-break-after: always; }
-                        /* Manual "Page Break" block: force the next content onto a
-                           new page, and hide its editor line in the PDF. */
-                        section.s_elks_page_break { page-break-after: always !important; padding: 0 !important; }
+
+                        body { font-family: Georgia, 'Times New Roman', serif; color: #111; }
+                        * { box-sizing: border-box; }
+                        img { max-width: 100%; height: auto; }
+                        .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
+
+                        /* -------- Layout: full-width blocks are BLOCK level (so
+                           break-inside: avoid keeps them whole); only blocks you
+                           size in the Style panel become inline-block and sit side
+                           by side. font-size:0 on the flow removes the whitespace
+                           gap between adjacent sized inline-blocks. -->
+                        .o_elks_print_flow { font-size: 0; }
+                        .o_mail_print_wrapper { display: block; width: 100%; }
+                        .o_mail_snippet_general {
+                            display: block; width: 100%;
+                            box-sizing: border-box; font-size: 12px;
+                            break-inside: avoid; margin-bottom: 9px; line-height: 1.25;
+                        }
+                        .o_mail_snippet_general p { margin: 0 0 4px; line-height: 1.25; }
+                        .o_mail_snippet_general tr, .o_mail_snippet_general img { break-inside: avoid; }
+
+                        /* Per-block Width (Style panel): sized blocks go inline-block
+                           and sit side by side. Fractions a touch under exact so
+                           adjacent blocks fit on one row. */
+                        .o_mail_snippet_general.o_elks_w_full { display: block; width: 100%; }
+                        .o_mail_snippet_general.o_elks_w_23 { display: inline-block; vertical-align: top; width: 66%; }
+                        .o_mail_snippet_general.o_elks_w_12 { display: inline-block; vertical-align: top; width: 49.6%; }
+                        .o_mail_snippet_general.o_elks_w_13 { display: inline-block; vertical-align: top; width: 33%; }
+
+                        /* Lodge Calendar: scale the published calendar down to fit a
+                           portrait page (its cells are sized for a landscape sheet). */
+                        .s_elks_calendar .elks-cal table.grid-table td.cell { height: 58px !important; font-size: 9px !important; padding: 2px 4px 3px !important; }
+                        .s_elks_calendar .elks-cal .month, .s_elks_calendar .elks-cal .year { font-size: 30px !important; }
+                        .s_elks_calendar .elks-cal .deco { font-size: 15px !important; letter-spacing: 2px !important; }
+                        .s_elks_calendar .elks-cal table.grid-table th { font-size: 11px !important; padding: 2px 0 3px !important; }
+                        .s_elks_calendar .elks-cal .cell .num { font-size: 9px !important; }
+                        .s_elks_calendar .elks-cal .cell .event-line,
+                        .s_elks_calendar .elks-cal .cell .holiday,
+                        .s_elks_calendar .elks-cal .cell .event-time,
+                        .s_elks_calendar .elks-cal .cell .banner-headline,
+                        .s_elks_calendar .elks-cal .cell .banner-sub { font-size: 8px !important; line-height: 1.15 !important; }
+                        .s_elks_calendar .elks-cal .footer-note { font-size: 9px !important; margin-top: 3px !important; }
+
+                        /* Manual Page Break: force a new page; hide its editor line */
+                        .s_elks_page_break { display: block; width: 100%; break-after: page; }
                         .s_elks_page_break_line { border: 0 !important; color: transparent !important; height: 0 !important; padding: 0 !important; }
-                        /* Tighter line spacing inside blocks (was too airy) */
-                        .o_mail_snippet_general { line-height: 1.25; }
-                        .o_mail_snippet_general p { margin: 0 0 4px !important; line-height: 1.25 !important; }
-                        /* Masthead should not be orphaned from what follows */
-                        section.s_elks_masthead { page-break-after: avoid; }
-                        /* No content bleed: clip framed blocks to their box */
-                        section.o_mail_snippet_general > .container > div[style*="border"] { overflow: hidden; }
+                        /* Inline Page Break: droppable mid-story; forces a break
+                           there and vanishes in print. Only effective inside
+                           full-width blocks -- inline-block (sized) boxes are
+                           atomic for CSS fragmentation and cannot be split. */
+                        .s_elks_page_break_inline {
+                            display: block; width: 100%;
+                            break-after: page; page-break-after: always;
+                            border: 0 !important; color: transparent !important;
+                            font-size: 0 !important; height: 0 !important;
+                            padding: 0 !important; margin: 0 !important;
+                            overflow: hidden;
+                        }
+                        .s_elks_masthead { break-after: avoid; }
+
+                        /* Auto "Continued on page #" bars, inserted at the real
+                           page-break boundary by the report's second WeasyPrint
+                           pass (ir_actions_report._bulletin_insert_continuation_markers).
+                           Also used by the manual "Continued On Page" snippet. */
+                        .s_elks_continued, .s_elks_continued_auto, .s_elks_continued_from_auto {
+                            break-inside: avoid; page-break-inside: avoid;
+                        }
+
+                        /* Story flow: long-form body text (Message Block /
+                           Two-Thirds+One-Third / Three Columns) is allowed to
+                           split naturally across pages -- the auto-continuation
+                           pass marks the real break point -- instead of being
+                           dragged whole onto the next page by the section-level
+                           break-inside: avoid above. Headings stay glued to their
+                           first line so a heading never sits alone at page-bottom. */
+                        .s_elks_story_flow { break-inside: auto; page-break-inside: auto; }
+                        .s_elks_story_flow h1, .s_elks_story_flow h2, .s_elks_story_flow h3 {
+                            break-after: avoid; page-break-after: avoid;
+                        }
+
+                        /* Lodge Calendar grid: keep each week row (and its
+                           cells) from splitting mid-row. The .o_mail_snippet_general
+                           tr rule below doesn't reach into the publisher's own
+                           .elks-cal table markup, which uses its own class scope. */
+                        .s_elks_calendar .elks-cal table.grid-table tr,
+                        .s_elks_calendar .elks-cal table.grid-table td.cell {
+                            break-inside: avoid; page-break-inside: avoid;
+                        }
                     </style>
 
-                    <!-- The drag-and-drop page (email-inlined HTML), with any
-                         dynamic Lodge blocks (New Members, Project Dollars,
-                         Delinquents, Charity) filled in from live lodge data. -->
+                    <!-- Drag-and-drop page (email-inlined HTML) with dynamic Lodge
+                         blocks filled in, wrapper table flattened, and the section
+                         holder tagged .o_elks_print_flow for column flow. -->
                     <t t-out="doc._render_print_body()"/>
-                </div>
-
-                <!-- Repeating page-number footer -->
-                <div class="footer"
-                     style="font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#3f2566;border-top:2px solid #3f2566;padding-top:4px;">
-                    <table style="width:100%;border:0;">
-                        <tr>
-                            <td style="text-align:left;">
-                                <t t-esc="doc.lodge_name or 'Lewiston Elks Lodge'"/>
-                                <t t-if="doc.lodge_number"> No. <t t-esc="doc.lodge_number"/></t>
-                                &#183; B.P.O.E.
-                            </td>
-                            <td style="text-align:center;font-weight:bold;">
-                                Page <span class="page"/> of <span class="topage"/>
-                            </td>
-                            <td style="text-align:right;">
-                                <t t-if="doc.issue_date" t-esc="doc.issue_date.strftime('%B %Y')"/>
-                            </td>
-                        </tr>
-                    </table>
                 </div>
             </t>
         </t>

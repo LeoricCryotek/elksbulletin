@@ -46,9 +46,18 @@ body:has(.o_elksbulletin) {
     --elks-page-h: 13.37in;   // 14in - 2*8mm
 }
 
-// Non-interactive overlay: a dashed "printable area" boundary plus faint
-// horizontal lines marking where each printed page ends. Purely a visual guide
-// so you can see how content will fall across pages; it never blocks editing.
+// Non-interactive overlay: a dashed "printable area" boundary, faint
+// horizontal lines marking where each printed page ends, and ruler tick
+// strips down BOTH side edges (minor tick every 1/4 in, longer tick every
+// 1 in) so you can eyeball how far content is from the next natural page
+// break while editing. All strips derive from the same --elks-page-h /
+// physical-inch units, so the ruler, the red boundary lines, and the PDF's
+// paperformat stay in agreement. Purely a visual guide; never blocks editing.
+// HONESTY NOTE: the browser canvas and WeasyPrint don't rasterize text
+// identically (font metrics, image loading), so the red line is a close
+// approximation of the natural break, not a guarantee -- the auto
+// "Continued on page #" pass works off the REAL WeasyPrint layout at print
+// time and is the source of truth.
 .o_elksbulletin::after {
     content: "";
     position: absolute;
@@ -59,13 +68,50 @@ body:has(.o_elksbulletin) {
     pointer-events: none;
     z-index: 5;
     border: 1px dashed rgba(91, 59, 140, 0.55);
-    background: repeating-linear-gradient(
-        to bottom,
-        transparent 0,
-        transparent calc(var(--elks-page-h) - 2px),
-        rgba(200, 40, 40, 0.45) calc(var(--elks-page-h) - 2px),
-        rgba(200, 40, 40, 0.45) var(--elks-page-h)
-    );
+    background-image:
+        // 1) printed-page boundary line (full width, red, strongest)
+        repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent calc(var(--elks-page-h) - 2px),
+            rgba(200, 40, 40, 0.45) calc(var(--elks-page-h) - 2px),
+            rgba(200, 40, 40, 0.45) var(--elks-page-h)
+        ),
+        // 2) left ruler -- major tick every 1in (longer strip)
+        repeating-linear-gradient(
+            to bottom,
+            rgba(91, 59, 140, 0.55) 0,
+            rgba(91, 59, 140, 0.55) 1px,
+            transparent 1px,
+            transparent 1in
+        ),
+        // 3) left ruler -- minor tick every 1/4in (short strip)
+        repeating-linear-gradient(
+            to bottom,
+            rgba(91, 59, 140, 0.3) 0,
+            rgba(91, 59, 140, 0.3) 1px,
+            transparent 1px,
+            transparent 0.25in
+        ),
+        // 4) right ruler -- major
+        repeating-linear-gradient(
+            to bottom,
+            rgba(91, 59, 140, 0.55) 0,
+            rgba(91, 59, 140, 0.55) 1px,
+            transparent 1px,
+            transparent 1in
+        ),
+        // 5) right ruler -- minor
+        repeating-linear-gradient(
+            to bottom,
+            rgba(91, 59, 140, 0.3) 0,
+            rgba(91, 59, 140, 0.3) 1px,
+            transparent 1px,
+            transparent 0.25in
+        );
+    background-size: 100% 100%, 14px 100%, 7px 100%, 14px 100%, 7px 100%;
+    background-position: 0 0, left top, left top, right top, right top;
+    background-repeat: no-repeat;
 }
 
 // Let our containers fill the page width (matches the print stylesheet), instead
@@ -77,3 +123,17 @@ body:has(.o_elksbulletin) {
     margin-left: 0 !important;
     margin-right: 0 !important;
 }
+
+// Per-block Width (Style panel): only SIZED blocks become inline-block so they
+// sit side by side; unsized blocks keep normal full-width block layout (so the
+// editor's drag/drop and drop zones behave). Mirrors the print stylesheet.
+.o_elksbulletin .o_mail_snippet_general.o_elks_w_23,
+.o_elksbulletin .o_mail_snippet_general.o_elks_w_12,
+.o_elksbulletin .o_mail_snippet_general.o_elks_w_13 {
+    display: inline-block !important;
+    vertical-align: top;
+    box-sizing: border-box;
+}
+.o_elksbulletin .o_mail_snippet_general.o_elks_w_23 { width: 66% !important; }
+.o_elksbulletin .o_mail_snippet_general.o_elks_w_12 { width: 49.5% !important; }
+.o_elksbulletin .o_mail_snippet_general.o_elks_w_13 { width: 33% !important; }

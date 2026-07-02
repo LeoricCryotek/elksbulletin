@@ -35,32 +35,43 @@
         </xpath>
         <!-- Structural / layout blocks: full-width sections -->
         <xpath expr="//snippets[@id='snippet_structure']" position="inside">
-            <t t-snippet="elksbulletin.s_elks_masthead" string="Masthead" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_masthead" string="Masthead" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_message.svg"/>
             <t t-snippet="elksbulletin.s_elks_section_bar" string="Section Bar" group="lodge"/>
-            <t t-snippet="elksbulletin.s_elks_er_message" string="Exalted Ruler Message" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_message" string="Message Block" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_message.svg"/>
             <t t-snippet="elksbulletin.s_elks_in_memoriam" string="In Memoriam" group="lodge"/>
-            <t t-snippet="elksbulletin.s_elks_officers" string="Lodge Officers" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_officers" string="Lodge Officers" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_officers.svg"/>
             <t t-snippet="elksbulletin.s_elks_two_thirds" string="Two-Thirds + One-Third" group="lodge"/>
             <t t-snippet="elksbulletin.s_elks_three_columns" string="Three Columns" group="lodge"/>
-            <t t-snippet="elksbulletin.s_elks_continued" string="Continued On Page" group="lodge"/>
-            <t t-snippet="elksbulletin.s_elks_mailing" string="Mailing Panel" group="lodge"/>
+            <t t-snippet="elksbulletin.s_elks_mailing" string="Mailing Panel" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_mailing.svg"/>
+            <t t-snippet="elksbulletin.s_elks_page_break" string="Page Break — Full Width" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
         </xpath>
         <!-- Dynamic data blocks live in INNER CONTENT so they can be dropped
              into a column (1/3, 2/3, 3/3) of the layout blocks above and sized
              to fit. Their content fills whatever width they're placed in. -->
         <xpath expr="//snippets[@id='snippet_content']" position="inside">
             <t t-snippet="elksbulletin.s_elks_new_members" string="New Members" group="lodge"
-               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_company_team.svg"/>
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_members.svg"/>
             <t t-snippet="elksbulletin.s_elks_project_dollars" string="Project Dollars" group="lodge"
-               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_numbers.svg"/>
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_money.svg"/>
             <t t-snippet="elksbulletin.s_elks_delinquents" string="Dues Report" group="lodge"
-               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_alert.svg"/>
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_dues.svg"/>
             <t t-snippet="elksbulletin.s_elks_charity" string="Charity Report" group="lodge"
-               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_hr.svg"/>
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_charity.svg"/>
             <t t-snippet="elksbulletin.s_elks_calendar" string="Lodge Calendar" group="lodge"
-               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_hr.svg"/>
-            <t t-snippet="elksbulletin.s_elks_page_break" string="Page Break" group="lodge"
-               t-thumbnail="/mass_mailing/static/src/img/snippets_thumbs/s_hr.svg"/>
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_calendar.svg"/>
+            <t t-snippet="elksbulletin.s_elks_page_break_inline" string="Page Break — Inline" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
+            <t t-snippet="elksbulletin.s_elks_upcoming_events" string="Upcoming Events" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_events.svg"/>
+            <t t-snippet="elksbulletin.s_elks_events" string="Events" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_events.svg"/>
+            <t t-snippet="elksbulletin.s_elks_continued" string="Continued On Page" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
         </xpath>
     </template>
 
@@ -77,6 +88,7 @@
                     <span data-elks-field="lodge_number">896</span>
                 </div>
                 <div style="background:#efeaf7;padding:12px 10px 8px;text-align:center;">
+                    <img data-elks-field="logo_lodge" alt="" style="display:none;max-height:66px;margin:0 auto 4px;"/>
                     <div style="font-family:Georgia,serif;font-style:italic;font-size:36px;line-height:1;color:#111111;"><span data-elks-field="lodge_name">Lewiston Elks</span></div>
                     <div style="font-family:Georgia,serif;font-weight:bold;font-size:44px;letter-spacing:2px;color:#111111;">NEWSLETTER</div>
                     <div style="font-family:Georgia,serif;font-style:italic;font-size:18px;color:#3f2566;margin-top:2px;">Elks Care &#8212; Elks Share</div>
@@ -101,22 +113,23 @@
         </section>
     </template>
 
-    <!-- Exalted Ruler message: 2/3 text + 1/3 photo, boxed -->
-    <template id="s_elks_er_message" name="Exalted Ruler Message">
-        <section class="s_elks_er_message o_mail_snippet_general pt16 pb16" data-name="ER Message">
+    <!-- Message Block: 2/3 message + 1/3 officer byline. Pick the officer with
+         the "Officer" dropdown in the Style panel (sets an o_elks_officer_<pos>
+         class); the title, photo, name and title then auto-fill from that officer
+         in elks.officer.term at print. The message text stays editable. The class
+         (not a data-attribute) is used because classes reliably survive the
+         mass_mailing email inliner into body_html. -->
+    <template id="s_elks_message" name="Message Block">
+        <section class="s_elks_message o_mail_snippet_general pt16 pb16 o_elks_officer_exalted_ruler" data-name="Message Block">
             <div class="container" style="border:2px solid #3f2566;border-radius:10px;padding:12px 16px;">
-                <h1 style="font-family:Arial,sans-serif;font-weight:900;color:#000000;font-size:34px;line-height:1;margin:0 0 10px;">Message from the Exalted Ruler</h1>
+                <h1 class="s_elks_msg_title" style="font-family:Arial,sans-serif;font-weight:900;color:#000000;font-size:34px;line-height:1;margin:0 0 10px;">Officer's Message</h1>
                 <div class="row">
-                    <div class="col-md-8 col-12">
-                        <p style="text-align:justify;">Fellow Elks, as we open a new lodge year I want to begin with gratitude. Every dinner, ceremony, and fundraiser this year depended on your generosity and your time.</p>
-                        <p style="text-align:justify;">We uphold the virtues of Charity, Justice, Brotherly Love, and Fidelity in service to our neighbors. Thank you for making this lodge a home.</p>
-                        <p style="text-align:justify;">With fraternal regards, I remain at your service.</p>
+                    <div class="col-md-8 col-12 s_elks_story_flow">
+                        <p style="text-align:justify;">Replace this with your message. Use the <b>Officer</b> dropdown in the Style panel to choose whose message this is &#8212; the title, photo, name and title fill in automatically on Print / Preview.</p>
                     </div>
-                    <div class="col-md-4 col-12" style="text-align:center;">
-                        <img src="/web/static/img/placeholder.png" alt="Exalted Ruler" style="width:100%;max-width:180px;border:1px solid #555555;"/>
-                        <p style="font-family:Arial,sans-serif;font-weight:bold;color:#000000;margin-top:6px;">John Q. Member<br/>
-                            <span style="font-weight:normal;font-style:italic;color:#3f2566;">Exalted Ruler</span>
-                        </p>
+                    <div class="col-md-4 col-12 s_elks_msg_byline" style="text-align:center;">
+                        <div style="width:100%;max-width:150px;height:150px;background:#8b8b8b;border:1px solid #555555;margin:0 auto;"></div>
+                        <p style="font-family:Arial,sans-serif;font-weight:bold;color:#000000;margin-top:6px;">Officer Name<br/><span style="font-weight:normal;font-style:italic;color:#3f2566;">Title</span></p>
                     </div>
                 </div>
             </div>
@@ -135,20 +148,14 @@
         </section>
     </template>
 
-    <!-- Lodge Officers strip -->
+    <!-- Lodge Officers strip — DYNAMIC: auto-fills from elks.officer.term for the
+         issue's lodge year at print/preview. -->
     <template id="s_elks_officers" name="Lodge Officers">
-        <section class="s_elks_officers o_mail_snippet_general pt16 pb16" data-name="Officers">
-            <div class="container" style="border:1px solid #d9cbe8;border-radius:6px;background:#e9e1f5;padding:10px 16px;">
-                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:8px;">Lodge Officers 2026&#8211;2027</div>
-                <div class="row" style="font-family:Arial,sans-serif;font-size:12px;">
-                    <div class="col-md-6 col-12"><b>Exalted Ruler</b> &#8212; John Q. Member</div>
-                    <div class="col-md-6 col-12"><b>Secretary</b> &#8212; Daniel S. Lewiston</div>
-                    <div class="col-md-6 col-12"><b>Leading Knight</b> &#8212; Thomas Cole</div>
-                    <div class="col-md-6 col-12"><b>Treasurer</b> &#8212; Patricia Hale</div>
-                    <div class="col-md-6 col-12"><b>Loyal Knight</b> &#8212; Robert Dunn</div>
-                    <div class="col-md-6 col-12"><b>Tiler</b> &#8212; Mark Stevens</div>
-                    <div class="col-md-6 col-12"><b>Lecturing Knight</b> &#8212; Linda Park</div>
-                    <div class="col-md-6 col-12"><b>Esquire</b> &#8212; George Ames</div>
+        <section class="s_elks_officers o_mail_snippet_general pt8 pb8" data-name="Officers">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:6px;">Lodge Officers</div>
+                <div data-elks-block="officers">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with the lodge officers for this issue's lodge year when you Print / Preview.</p>
                 </div>
             </div>
         </section>
@@ -161,7 +168,7 @@
         <section class="s_elks_two_thirds o_mail_snippet_general pt16 pb16" data-name="Two-Thirds + One-Third">
             <div class="container">
                 <div class="row">
-                    <div class="col-md-8 col-12">
+                    <div class="col-md-8 col-12 s_elks_story_flow">
                         <h2 style="font-family:Arial,sans-serif;font-weight:900;color:#000000;font-size:24px;margin:0 0 6px;">Main Story</h2>
                         <p style="text-align:justify;">Two-thirds column for the lead article. Drag text and images here, or type directly to replace this copy.</p>
                     </div>
@@ -180,15 +187,15 @@
         <section class="s_elks_three_columns o_mail_snippet_general pt16 pb16" data-name="Three Columns">
             <div class="container">
                 <div class="row">
-                    <div class="col-md-4 col-12">
+                    <div class="col-md-4 col-12 s_elks_story_flow">
                         <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:15px;margin:0 0 6px;">Column One</h3>
                         <p style="text-align:justify;">Equal thirds for briefs and notes around the lodge.</p>
                     </div>
-                    <div class="col-md-4 col-12">
+                    <div class="col-md-4 col-12 s_elks_story_flow">
                         <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:15px;margin:0 0 6px;">Column Two</h3>
                         <p style="text-align:justify;">Equal thirds for briefs and notes around the lodge.</p>
                     </div>
-                    <div class="col-md-4 col-12">
+                    <div class="col-md-4 col-12 s_elks_story_flow">
                         <h3 style="font-family:Arial,sans-serif;font-weight:bold;color:#3f2566;font-size:15px;margin:0 0 6px;">Column Three</h3>
                         <p style="text-align:justify;">Equal thirds for briefs and notes around the lodge.</p>
                     </div>
@@ -197,13 +204,20 @@
         </section>
     </template>
 
-    <!-- Continued-on-page bar -->
+    <!-- Continued-on-page bar. TRUE inner content: bare div + o_snippet_drop_in_only
+         (matching core's s_inline_text/s_button/s_image pattern in
+         mass_mailing_inner_snippets.xml), NOT a <section>+<container> wrapper.
+         A <section> root is what makes html_builder treat a block as a
+         standalone structural drop (page-root only); wrapping this in one made
+         it land as its own full-width row instead of nesting into a story's
+         flow, which defeated the point of a manual continuation marker. Default
+         text is editable in place. For most cases you won't need this anymore:
+         the auto-continuation pass (ir_actions_report._bulletin_insert_continuation_markers)
+         inserts one of these automatically wherever a .s_elks_story_flow column
+         actually breaks across pages. Keep this for one-off manual placement
+         outside a story flow. -->
     <template id="s_elks_continued" name="Continued On Page">
-        <section class="s_elks_continued o_mail_snippet_general pt8 pb8" data-name="Continued">
-            <div class="container">
-                <div style="background:#d7d2dd;text-align:center;font-family:Georgia,serif;font-size:13px;padding:4px;">Please see <b>STORY,</b> Page 2</div>
-            </div>
-        </section>
+        <div class="s_elks_continued o_snippet_drop_in_only" style="background:#d7d2dd;text-align:center;font-family:Georgia,serif;font-style:italic;font-size:13px;padding:4px;">Continued on page #</div>
     </template>
 
     <!-- ============ Dynamic blocks ============ -->
@@ -276,6 +290,30 @@
         </section>
     </template>
 
+    <!-- Upcoming Events: approved Project Events (elksevent) — Title / Description / Date -->
+    <template id="s_elks_upcoming_events" name="Upcoming Events (Dynamic)">
+        <section class="s_elks_upcoming_events o_mail_snippet_general pt8 pb8" data-name="Upcoming Events (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Upcoming Events</div>
+                <div data-elks-block="upcoming_events">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with approved Project Events (title, description, date) when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
+    <!-- Events: the lodge's actual events from Odoo's Events app (event.event) -->
+    <template id="s_elks_events" name="Events (Dynamic)">
+        <section class="s_elks_events o_mail_snippet_general pt8 pb8" data-name="Events (Dynamic)">
+            <div class="container" style="padding:2px 0;">
+                <div style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:3px;border-radius:3px;margin-bottom:4px;">Events</div>
+                <div data-elks-block="events">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with the lodge's Events (Odoo Events app) when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
+    </template>
+
     <!-- Page Break: forces the next content onto a new printed page. The dashed
          line shows in the editor; it is invisible in the PDF (see report CSS
          .s_elks_page_break). Use it wherever wkhtmltopdf's auto avoid isn't
@@ -286,6 +324,24 @@
                 <div class="s_elks_page_break_line" style="border-top:2px dashed #b39ddb;text-align:center;color:#8e7cc3;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding-top:3px;">&#9986; Page Break</div>
             </div>
         </section>
+    </template>
+
+    <!-- Page Break (Inline): same forced break, but TRUE inner content (bare div
+         + o_snippet_drop_in_only, like the Continued bar above) so it can be
+         dropped INSIDE a story column mid-text (e.g. between two paragraphs of
+         an Officer's Message) instead of only between full-width sections.
+         Invisible in the PDF (report CSS .s_elks_page_break_inline).
+         LIMITATION: only effective inside FULL-WIDTH blocks (Message Block,
+         Two-Thirds + One-Third, Three Columns). Inside a SIZED side-by-side
+         block (o_elks_w_23/_12/_13) it does nothing: those render as
+         inline-block in print, and inline-block boxes are atomic for CSS
+         fragmentation; a break-after inside one cannot split it.
+         The auto-continuation pass deliberately skips this element when
+         assigning elks-flow ids (issue resolver step 5), so the
+         "Continued on page #" bar pairs the paragraphs AROUND the break and
+         lands on the correct side of it (bottom of the earlier page). -->
+    <template id="s_elks_page_break_inline" name="Page Break (Inline)">
+        <div class="s_elks_page_break_inline o_snippet_drop_in_only" style="border-top:2px dashed #b39ddb;text-align:center;color:#8e7cc3;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding-top:3px;">&#9986; Page Break</div>
     </template>
 
     <!-- Mailing Panel: lodge return address + non-profit postage box for the

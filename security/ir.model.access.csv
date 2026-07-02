@@ -1,4 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_elks_bulletin_issue_user,elks.bulletin.issue.user,model_elks_bulletin_issue,base.group_user,1,1,1,1
-access_elks_bulletin_template_user,elks.bulletin.template.user,model_elks_bulletin_template,base.group_user,1,0,0,0
-access_elks_bulletin_template_manager,elks.bulletin.template.manager,model_elks_bulletin_template,base.group_system,1,1,1,1
+access_elks_bulletin_issue_editor,elks.bulletin.issue.editor,model_elks_bulletin_issue,group_elksbulletin_editor,1,1,1,0
+access_elks_bulletin_issue_manager,elks.bulletin.issue.manager,model_elks_bulletin_issue,group_elksbulletin_manager,1,1,1,1
+access_elks_bulletin_template_editor,elks.bulletin.template.editor,model_elks_bulletin_template,group_elksbulletin_editor,1,0,0,0
+access_elks_bulletin_template_manager,elks.bulletin.template.manager,model_elks_bulletin_template,group_elksbulletin_manager,1,1,1,1
