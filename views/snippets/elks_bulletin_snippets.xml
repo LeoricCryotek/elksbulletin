@@ -126,7 +126,7 @@
                             <img data-elks-field="logo_lodge_bw" src="/web/static/img/placeholder.png" alt="Lodge logo" style="max-height:96px;max-width:100%;"/>
                         </td>
                         <td style="width:56%;text-align:center;vertical-align:middle;padding:4px 0;">
-                            <div style="font-family:'Brush Script MT','Snell Roundhand','Segoe Script',cursive;font-size:42px;line-height:1;color:#141414;"><span data-elks-field="lodge_name">Lewiston Elks Lodge</span></div>
+                            <div style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:40px;line-height:1;color:#141414;"><span data-elks-field="lodge_name">Lewiston Elks Lodge</span></div>
                             <div style="font-family:Georgia,'Times New Roman',serif;font-weight:bold;font-size:46px;letter-spacing:3px;line-height:1;color:#141414;">NEWSLETTER</div>
                         </td>
                         <td style="width:24%;text-align:center;vertical-align:middle;padding:8px 6px;">
@@ -135,7 +135,7 @@
                     </tr>
                 </table>
                 <!-- Tagline -->
-                <div style="text-align:center;font-family:'Brush Script MT','Snell Roundhand','Segoe Script',cursive;font-size:22px;color:#141414;padding:0 0 8px;">Elks Care &#8212; Elks Share</div>
+                <div style="text-align:center;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:#141414;padding:0 0 8px;">Elks Care &#8212; Elks Share</div>
             </div>
         </section>
     </template>

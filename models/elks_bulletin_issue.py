@@ -17,6 +17,7 @@
 import base64
 import calendar as _calmod
 import logging
+import re
 from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -407,8 +408,10 @@ class ElksBulletinIssue(models.Model):
         #     masthead / Grand-Lodge-style banner reflects THIS issue (month,
         #     website, Volume/No., lodge name, logos and building photo)
         #     instead of the static placeholder.
+        # NOTE: "lodge_name" is intentionally NOT auto-filled here. The masthead
+        # title prints exactly what the editor holds (user preference), so a
+        # per-issue custom title is never overwritten by the Lodge Settings name.
         field_values = {
-            "lodge_name": getattr(self, "lodge_name", "") or "",
             "lodge_number": getattr(self, "lodge_number", "") or "",
             "city_state": getattr(self, "city_state", "") or "",
             "issue_ref": getattr(self, "issue_ref", "") or "",
@@ -442,6 +445,27 @@ class ElksBulletinIssue(models.Model):
                 for child in list(el):
                     el.remove(child)
                 el.text = field_values[key]
+
+        # 1b-ii) Normalize non-portable script fonts in the masthead. The
+        #        snippet historically used Mac/Windows system fonts (Brush
+        #        Script MT / Snell Roundhand / Segoe Script). Those exist on
+        #        the editor's machine but NOT on the Linux print server, so
+        #        WeasyPrint substituted a different font and the PDF did not
+        #        match the editor. Rewrite any such inline font-family to a
+        #        portable stack so print matches everywhere. Runs on ALREADY
+        #        STORED issues too (fixes the current newsletter, not just new
+        #        ones). Scoped to the masthead so body text is untouched.
+        _bad_fonts = ("Brush Script MT", "Snell Roundhand", "Segoe Script")
+        _portable = "font-family:Georgia,'Times New Roman',serif;"
+        for mast in frag.xpath(
+                ".//*[contains(concat(' ', normalize-space(@class), ' '),"
+                " ' s_elks_masthead ')]"):
+            for el in mast.xpath(".//*[@style]"):
+                st = el.get("style") or ""
+                if any(f in st for f in _bad_fonts):
+                    st = re.sub(r"font-family\s*:[^;]*;?", _portable, st,
+                                count=1)
+                    el.set("style", st)
 
         # 1c) Message Blocks: a section carrying an o_elks_officer_<position>
         #     class (set by the Style-panel Officer dropdown) gets its title set
@@ -1009,36 +1033,73 @@ class ElksBulletinIssue(models.Model):
             )
         return "".join(rows)
 
+    @staticmethod
+    def _first_line(html_value, limit=200):
+        """First readable line of a rich-text (Html) value, tags stripped and
+        truncated. Used so the newsletter shows a teaser, not the whole event
+        page. Prefers lxml's text walk; regex strip is a defensive fallback."""
+        if not html_value:
+            return ""
+        text = ""
+        try:
+            frag = lxml_html.fragment_fromstring(
+                str(html_value), create_parent="div")
+            for piece in frag.itertext():
+                piece = " ".join(piece.split())
+                if piece:
+                    text = piece
+                    break
+        except Exception:
+            text = " ".join(re.sub(r"<[^>]+>", " ", str(html_value)).split())
+        if len(text) > limit:
+            text = text[:limit].rsplit(" ", 1)[0].rstrip() + "…"
+        return text
+
     # === AI AGENT ===
-    # The lodge's actual events from Odoo's Events app (event.event): upcoming
-    # events (start today or later). Shows name, date, and description (Html).
+    # The lodge's actual events from Odoo's Events app (event.event). PUBLISHED,
+    # upcoming events only. Deliberately a TEASER, not the full page: per event
+    # we show the title in a bar + date + the FIRST LINE of the description, then
+    # ONE notice pointing to the lodge website's /event page for full details
+    # (the website URL comes from FRS lodge_website when set). The whole event
+    # description is intentionally NOT printed. website_published is only in the
+    # domain when the field exists (website_event installed).
     def _html_events(self):
         now = fields.Datetime.now()
-        events = self.env["event.event"].sudo().search([
-            ("date_begin", ">=", now),
-        ], order="date_begin asc")
+        Event = self.env["event.event"].sudo()
+        domain = [("date_begin", ">=", now)]
+        if "website_published" in Event._fields:
+            domain.append(("website_published", "=", True))
+        events = Event.search(domain, order="date_begin asc")
         if not events:
             return ('<p style="font-style:italic;color:#666;">'
                     'No upcoming lodge events scheduled.</p>')
         rows = []
         for evt in events:
             when = self._fmt_date(evt.date_begin.date()) if evt.date_begin else ""
-            # description is a rich-text Html field, so render it as-is (authored
-            # by lodge staff); only the plain-text name is escaped.
-            desc = (evt.description or "").strip() if evt.description else ""
-            desc_html = (
-                f'<div style="font-family:Arial,sans-serif;font-size:11px;'
-                f'color:#555;margin-top:1px;">{desc}</div>' if desc else "")
+            teaser = self._first_line(evt.description)
             rows.append(
-                '<div style="margin:0 0 6px;padding-bottom:5px;'
-                'border-bottom:1px solid #e5dff0;">'
-                '<div><b style="font-family:Georgia,serif;font-size:13px;">'
-                f'{self._e(evt.name)}</b>'
-                f'<span style="float:right;font-family:Arial,sans-serif;'
-                f'font-size:11px;font-weight:bold;color:{self._PURPLE_DEEP};">'
-                f'{when}</span></div>{desc_html}</div>'
+                '<div style="margin:0 0 7px;">'
+                # Title bar (banner) + date
+                f'<div style="background:{self._PURPLE};color:#ffffff;'
+                'font-family:Georgia,serif;font-weight:bold;font-size:13px;'
+                'padding:2px 8px;border-radius:3px;">'
+                f'{self._e(evt.name)}'
+                f'<span style="float:right;font-weight:normal;font-size:11px;">'
+                f'{when}</span></div>'
+                # First line only
+                + (f'<div style="font-family:Arial,sans-serif;font-size:11px;'
+                   f'color:#333;margin:2px 4px 0;">{self._e(teaser)}</div>'
+                   if teaser else "")
+                + '</div>'
             )
-        return "".join(rows)
+        site = (getattr(self, "lodge_website", "") or
+                "https://lewistonelks896.com").rstrip("/")
+        disp = re.sub(r"^https?://", "", site) + "/event"
+        notice = (
+            '<div style="font-family:Arial,sans-serif;font-size:10.5px;'
+            'font-style:italic;color:#777;text-align:center;margin-top:2px;">'
+            f'For full event details, visit {self._e(disp)}</div>')
+        return "".join(rows) + notice
 
     # === HUMAN ===
     # The Lodge Calendar block renders the SAME calendar the website publishes

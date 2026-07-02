@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.3.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -108,7 +108,12 @@ are now baked to LITERAL inline CSS at print (the --box-border-* variables are
 resolved to real border-width/border-radius/border-style), so rounded corners
 and widths print on BOTH WeasyPrint and wkhtmltopdf instead of relying on
 var(). Officer's Message title only auto-fills when left at the default — any
-edit now prints verbatim.
+edit now prints verbatim. In Memoriam entries show membership tenure (computed
+at death), a veteran flag, and a Life-Member / Honorary-Life-Member badge. The
+Events block (event.event) is now a teaser — PUBLISHED upcoming events only,
+showing the title in a bar + date + the first line of the description, plus one
+notice linking the lodge website's /event page (FRS lodge_website) instead of
+printing the whole event page.
 
 19.0.1.1.0 — Page breaks hoisted out of inliner tables (works in both PDF
 engines); inline Page Break variant; auto continuation markers; compact GL
