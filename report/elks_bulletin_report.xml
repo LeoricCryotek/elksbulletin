@@ -429,6 +429,17 @@
                         }
                         .s_elks_masthead { break-after: avoid; }
 
+                        /* Spacer block: an empty vertical gap. Its inline height
+                           prints as-is; the editor-only "Spacer" label is hidden.
+                           break-inside:avoid so the whole gap stays on one page. */
+                        .s_elks_spacer { display: block; width: 100%; break-inside: avoid; page-break-inside: avoid; }
+                        .s_elks_spacer_label { display: none !important; }
+                        /* Pin-to-bottom filler: inserted by the two-pass layout
+                           directly above an .o_elks_pin_bottom block to drop it to
+                           the page bottom. Empty; its inline height does the work. */
+                        .s_elks_pin_filler { display: block; width: 100%; }
+                        .o_elks_pin_bottom { break-inside: avoid; page-break-inside: avoid; }
+
                         /* Auto "Continued on page #" bars, inserted at the real
                            page-break boundary by the report's second WeasyPrint
                            pass (ir_actions_report._bulletin_insert_continuation_markers).

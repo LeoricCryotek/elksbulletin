@@ -9,6 +9,10 @@
 //   • Officer (Style panel) — on the Message Block, pick whose message it is
 //     (Exalted Ruler, Leading Knight, ...); the photo, name and title then
 //     auto-fill from that officer at print.
+//   • Spacer height (Style panel) — on the Spacer block, set a preset or custom
+//     vertical gap; use it to push a block (e.g. the Calendar) down the page.
+//   • Pin to page bottom (Style panel) — on any full-width block, drop it to the
+//     bottom of the page it lands on (the report's two-pass layout does the push).
 //   • Page-turn preview — content after a Page Break is pushed down to the
 //     next red page-boundary line on the canvas, so the editor shows the page
 //     turn the way the PDF will print it.
@@ -52,10 +56,36 @@ export class ElksMessageOption extends BaseOptionComponent {
     static groups = ["base.group_user"];
 }
 
+// Spacer height (Style panel): the Spacer block is an empty section whose only
+// job is vertical space. Height is written as an inline style on the section
+// (BuilderNumberInput/SelectItem styleAction="height"), so the same value drives
+// the editor canvas AND the printed PDF — no class round-tripping needed.
+export class ElksSpacerOption extends BaseOptionComponent {
+    static template = "elksbulletin.SpacerOption";
+    static selector = ".s_elks_spacer";
+    static groups = ["base.group_user"];
+}
+
+// Pin to page bottom (Style panel): a simple class toggle on a full-width
+// section. The class does nothing on its own in print — at render the report's
+// two-pass layout (ir_actions_report._bulletin_insert_continuation_markers_inner)
+// measures where the block lands and inserts a filler above it so its bottom
+// edge sits on the page's bottom margin. Excluded from utility blocks (Page
+// Break, Spacer) where pinning is meaningless.
+export class ElksPinBottomOption extends BaseOptionComponent {
+    static template = "elksbulletin.PinBottomOption";
+    static selector =
+        "section.o_mail_snippet_general:not(.s_elks_page_break):not(.s_elks_spacer)";
+    static groups = ["base.group_user"];
+}
+
 class ElksBulletinOptionsPlugin extends Plugin {
     static id = "elksbulletin.Options";
     resources = {
-        builder_options: [ElksSizeOption, ElksMessageOption],
+        builder_options: [
+            ElksSizeOption, ElksMessageOption,
+            ElksSpacerOption, ElksPinBottomOption,
+        ],
     };
 }
 

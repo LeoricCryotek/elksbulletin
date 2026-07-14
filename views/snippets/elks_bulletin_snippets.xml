@@ -65,6 +65,8 @@
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_mailing.svg"/>
             <t t-snippet="elksbulletin.s_elks_page_break" string="Page Break — Full Width" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
+            <t t-snippet="elksbulletin.s_elks_spacer" string="Spacer" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
         </xpath>
         <!-- Dynamic data blocks live in INNER CONTENT so they can be dropped
              into a column (1/3, 2/3, 3/3) of the layout blocks above and sized
@@ -401,6 +403,19 @@
             <div class="container">
                 <div class="s_elks_page_break_line" style="border-top:2px dashed #b39ddb;text-align:center;color:#8e7cc3;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding-top:3px;">&#9986; Page Break</div>
             </div>
+        </section>
+    </template>
+
+    <!-- Spacer: an empty, resizable vertical gap. Drop it between blocks and set
+         its Height in the Style panel (presets S/M/L/X-L or a custom px value) to
+         push what follows further down the page — e.g. to drive the Lodge
+         Calendar to the bottom of the page. The dashed outline + "Spacer" label
+         show only in the editor (report CSS hides the label; the section's inline
+         height is what prints). Height lives inline on the section so the same
+         value is honored in the editor and the PDF. -->
+    <template id="s_elks_spacer" name="Spacer">
+        <section class="s_elks_spacer o_mail_snippet_general" data-name="Spacer" style="height:96px;">
+            <div class="s_elks_spacer_label">Spacer</div>
         </section>
     </template>
 

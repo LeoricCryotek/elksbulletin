@@ -43,4 +43,29 @@
         </BuilderRow>
     </t>
 
+    <!-- Spacer: a preset height picker plus a custom px value. Both write the
+         section's inline `height` (styleAction), so the picker highlights the
+         active preset and the number box allows any value in between. -->
+    <t t-name="elksbulletin.SpacerOption">
+        <BuilderRow label.translate="Height">
+            <BuilderSelect>
+                <BuilderSelectItem styleAction="'height'" styleActionValue="'48px'">Small</BuilderSelectItem>
+                <BuilderSelectItem styleAction="'height'" styleActionValue="'96px'">Medium</BuilderSelectItem>
+                <BuilderSelectItem styleAction="'height'" styleActionValue="'192px'">Large</BuilderSelectItem>
+                <BuilderSelectItem styleAction="'height'" styleActionValue="'288px'">Extra Large</BuilderSelectItem>
+            </BuilderSelect>
+        </BuilderRow>
+        <BuilderRow label.translate="Custom height">
+            <BuilderNumberInput styleAction="'height'" unit="'px'"/>
+        </BuilderRow>
+    </t>
+
+    <!-- Pin to page bottom: a class toggle read by the report's two-pass layout,
+         which pushes the block to the bottom of the page it lands on. -->
+    <t t-name="elksbulletin.PinBottomOption">
+        <BuilderRow label.translate="Pin to page bottom">
+            <BuilderCheckbox classAction="'o_elks_pin_bottom'"/>
+        </BuilderRow>
+    </t>
+
 </templates>

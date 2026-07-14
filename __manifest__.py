@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.6.0",
+    "version": "19.0.1.8.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.6.0
+Elks Bulletin — v19.0.1.8.0
 ===========================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -48,6 +48,9 @@ Features
 * Grand-Lodge-style masthead banner pulling the lodge name, B&W logo,
   building photo and website URL from the FRS module (``elks.lodge.settings``)
   — Volume = years since charter, No. = issue month.
+* Layout controls: a Spacer block (preset or custom px height) to open vertical
+  space, and a "Pin to page bottom" toggle that drops a block (e.g. the Calendar)
+  to the bottom of the page it lands on, measured at print by the two-pass layout.
 * Page Break blocks — Full Width (between sections) and Inline (mid-story) —
   hoisted out of the email-inliner's table markup at print so both PDF
   engines honor them.
@@ -63,6 +66,30 @@ Features
 
 Version history
 ---------------
+19.0.1.8.0 — Layout controls. New Spacer block: an empty, resizable vertical gap
+(Style-panel Height — presets Small/Medium/Large/Extra-Large or a custom px
+value, written as the section's inline height so editor and PDF match). New "Pin
+to page bottom" Style-panel toggle on full-width blocks: at print the report's
+existing two-pass WeasyPrint layout measures where the block lands and inserts a
+filler above it so its bottom edge sits on the page's bottom margin — reusing the
+continuation pass's single extra render (no added render cost). The editor canvas
+now shows the Spacer (dashed outline + label) and badges a pinned block, and the
+printed-page boundary line on the canvas is drawn more boldly so page ends are
+easy to see while editing (the dashed printable-area margin box was already
+drawn). Report CSS hides the Spacer's editor label and keeps the Spacer / pinned
+block from splitting across pages.
+
+19.0.1.7.0 — Housekeeping / best-practice pass (no behaviour change). Removed
+stale compiled bytecode (__pycache__/*.pyc, including a cpython-310 build) that
+was accidentally tracked in git — it never belonged in the repo and risked stale
+bytecode on pull. The emoji wrapper now logs "wrapped N emoji run(s)" per print
+so a live build can be confirmed from the log. Tightened the report url_fetcher:
+the /web/image/<model>/<id>/<field> branch now only serves genuine Binary fields
+(trust boundary documented in-code). Corrected a mis-placed method comment
+(_officer_label vs _officer_byline_html). Refreshed HANDOFF.md to match the live
+Vultr deployment (systemd odona-lewistonelks896.com, Python 3.13, WeasyPrint 69),
+the current feature set, and the emoji/restart gotchas.
+
 19.0.1.6.0 — Emoji printing made self-contained and reliable. The module
 AUTO-INSTALLS the free monochrome Noto Emoji font on install and on every -u:
 it downloads the font and stores it as an ir.attachment (the module folder is

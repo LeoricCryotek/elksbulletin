@@ -197,15 +197,27 @@ class IrActionsReport(models.Model):
         flow_xpath = (".//*[contains(concat(' ', normalize-space(@class), ' '),"
                       " ' s_elks_story_flow ')]")
         flow_containers = frag.xpath(flow_xpath)
-        if not flow_containers:
+        # Blocks the editor flagged "Pin to page bottom" (Style panel) — pushed
+        # down to sit at the bottom of the page they land on (see below).
+        pin_xpath = (".//*[contains(concat(' ', normalize-space(@class), ' '),"
+                     " ' o_elks_pin_bottom ')]")
+        pinned = frag.xpath(pin_xpath)
+        if not flow_containers and not pinned:
             return html  # nothing to check
 
-        # --- pass 1: find which page each "elks-flow-N" child lands on -----
+        # --- pass 1: render once; read the REAL page layout ---------------
         document = weasyprint.HTML(
             string=html, base_url=base_url, url_fetcher=fetcher,
         ).render()
 
         element_pages = defaultdict(set)
+        # For pinned blocks we need the geometry of their principal box, keyed
+        # by the box's source element identity (stable within this one render).
+        pin_geom = {}          # id(element) -> (page_idx, box_top, box_height)
+        page_bottoms = {}      # page_idx    -> usable content-area bottom (px)
+
+        def _has_cls(el, cls):
+            return (" " + (el.get("class") or "") + " ").find(" " + cls + " ") >= 0
 
         def walk(box, page_idx):
             el = getattr(box, "element", None)
@@ -213,11 +225,54 @@ class IrActionsReport(models.Model):
                 eid = el.get("id")
                 if eid and eid.startswith("elks-flow-"):
                     element_pages[eid].add(page_idx)
+                if _has_cls(el, "o_elks_pin_bottom"):
+                    key = id(el)
+                    if key not in pin_geom:  # keep the first (principal) box
+                        # Bottom margin edge = border-box top (position_y) +
+                        # border_height (border+padding+content) + margin_bottom.
+                        # box.height alone is CONTENT height and undershoots.
+                        try:
+                            outer_bottom = (box.position_y
+                                            + box.border_height()
+                                            + getattr(box, "margin_bottom", 0.0))
+                        except Exception:
+                            outer_bottom = (getattr(box, "position_y", 0.0)
+                                            + (getattr(box, "height", 0.0) or 0.0))
+                        pin_geom[key] = (page_idx, outer_bottom)
             for child in getattr(box, "children", None) or []:
                 walk(child, page_idx)
 
         for page_idx, page in enumerate(document.pages):
-            walk(page._page_box, page_idx)
+            pb = page._page_box
+            # Usable bottom of the printable area = top margin + content height.
+            page_bottoms[page_idx] = (getattr(pb, "margin_top", 0.0)
+                                      + (getattr(pb, "height", 0.0) or 0.0))
+            walk(pb, page_idx)
+
+        # --- pin-to-bottom: insert a filler above each pinned block so its
+        #     bottom edge lands on the page's bottom margin. Geometry came from
+        #     the render above, so the filler height is exact; because it goes
+        #     directly before the block, everything above is undisturbed and the
+        #     block simply drops to the bottom of the SAME page. Matched in
+        #     document order (render order == frag order). Guarded per-block.
+        pinned_changed = False
+        geoms = list(pin_geom.values())  # document order (pages then DFS)
+        for elem, geom in zip(pinned, geoms):
+            try:
+                page_idx, outer_bottom = geom
+                usable_bottom = page_bottoms.get(page_idx)
+                if not usable_bottom:
+                    continue
+                gap = usable_bottom - outer_bottom - 4  # 4px safety
+                if gap < 8:
+                    continue  # already near the bottom; leave it
+                filler = etree.Element(
+                    "div", **{"class": "s_elks_pin_filler"})
+                filler.set("style", "height:%dpx;" % int(gap))
+                elem.addprevious(filler)
+                pinned_changed = True
+            except Exception:
+                continue
 
         # --- pass 2: splice continuation markers at the real page boundary --
         inserted = False
@@ -244,7 +299,7 @@ class IrActionsReport(models.Model):
                 nxt.addprevious(from_bar)
                 inserted = True
 
-        if not inserted:
+        if not inserted and not pinned_changed:
             return html
         return lxml_html.tostring(frag, encoding="unicode")
 
@@ -303,9 +358,16 @@ class IrActionsReport(models.Model):
                         mime = att.mimetype or mime
                     elif len(rest) >= 3:
                         # /web/image/<model>/<id>/<field>[/<filename>]
+                        # Trust boundary: these URLs come from newsletter body
+                        # HTML authored by Editor/Publisher-group officers (a
+                        # trusted role) and the bytes are only composited into
+                        # that same officer's PDF. We still restrict this branch
+                        # to genuine BINARY fields so a stray/mistyped src can't
+                        # pull a non-image field's value into the render.
                         model, rid, field = rest[0], int(rest[1]), rest[2]
                         rec = env[model].sudo().browse(rid)
-                        val = rec[field] if field in rec._fields else False
+                        f = rec._fields.get(field)
+                        val = rec[field] if (f and f.type == "binary") else False
                         raw = base64.b64decode(val) if val else b""
                     if raw is not None:
                         return {"string": raw, "mime_type": mime}

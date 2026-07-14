@@ -89,8 +89,8 @@ body:has(.o_elksbulletin) {
             to bottom,
             transparent 0,
             transparent calc(var(--elks-page-h) - 2px),
-            rgba(200, 40, 40, 0.45) calc(var(--elks-page-h) - 2px),
-            rgba(200, 40, 40, 0.45) var(--elks-page-h)
+            rgba(200, 40, 40, 0.7) calc(var(--elks-page-h) - 2px),
+            rgba(200, 40, 40, 0.7) var(--elks-page-h)
         ),
         // 2) left ruler -- major tick every 1in (longer strip)
         repeating-linear-gradient(
@@ -169,4 +169,49 @@ body:has(.o_elksbulletin) {
 .o_elksbulletin p,
 .o_elksbulletin li {
     line-height: calc(1em + 5px);
+}
+
+// -----------------------------------------------------------------------------
+// Layout-control blocks (19.0.1.8.0). EDITOR-ONLY affordances — none of this
+// prints (the report hides the Spacer label; the pin badge is a canvas overlay).
+// Spacer: an empty vertical gap block. A faint dashed outline + centered
+// "Spacer" caption make it visible and selectable while editing; the section's
+// inline height (set from the Style panel) is what actually reserves space, so
+// the gap you see is the gap that prints.
+.o_elksbulletin .s_elks_spacer {
+    position: relative;
+    min-height: 16px;
+    outline: 1px dashed rgba(91, 59, 140, 0.45);
+    outline-offset: -1px;
+}
+.o_elksbulletin .s_elks_spacer .s_elks_spacer_label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: italic 11px/1 Arial, sans-serif;
+    letter-spacing: 1px;
+    color: rgba(91, 59, 140, 0.7);
+    pointer-events: none;
+}
+
+// Pin to page bottom: badge the block so it's obvious which one will be dropped
+// to the page bottom at print. The actual push happens at render time (the
+// report's two-pass layout inserts a filler above it) — this is just a label.
+.o_elksbulletin .o_elks_pin_bottom {
+    position: relative;
+}
+.o_elksbulletin .o_elks_pin_bottom::after {
+    content: "\2913  pinned to page bottom";
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    z-index: 6;
+    font: 10px/1.5 Arial, sans-serif;
+    color: #ffffff;
+    background: rgba(91, 59, 140, 0.85);
+    padding: 1px 6px;
+    border-radius: 3px;
+    pointer-events: none;
 }

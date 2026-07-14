@@ -1299,13 +1299,16 @@ class ElksBulletinIssue(models.Model):
         return totals + reminder
 
     # === AI AGENT ===
-    # Byline (photo + name + title) for the officer holding <position> in this
-    # issue's lodge year, used by the Message Block. Photo from the officer term,
-    # else the member's avatar, else a grey placeholder.
+    # Human-readable label for an officer <position> code (e.g. "exalted_ruler"
+    # -> "Exalted Ruler"), read from the elks.officer.term selection.
     def _officer_label(self, position):
         Term = self.env["elks.officer.term"].sudo()
         return dict(Term._fields["position"].selection).get(position, position)
 
+    # === AI AGENT ===
+    # Byline (photo + name + title) for the officer holding <position> in this
+    # issue's lodge year, used by the Message Block. Photo from the officer term,
+    # else the member's avatar, else a grey placeholder.
     def _officer_byline_html(self, position):
         d = self.issue_date or fields.Date.context_today(self)
         y, m = d.year, d.month
