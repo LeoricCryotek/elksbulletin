@@ -25,6 +25,7 @@ from lxml import etree, html as lxml_html
 from markupsafe import Markup, escape as markup_escape
 
 from odoo import api, fields, models, _
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -253,6 +254,103 @@ class ElksBulletinIssue(models.Model):
         return super().create(vals_list)
 
     # === HUMAN ===
+    # Picking a template only auto-loads its content when the newsletter is still
+    # empty, so switching templates on a blank issue "just works" — and never
+    # silently wipes a newsletter you've already built. To deliberately reset an
+    # issue back to a template, use the "Load Template" button.
+    # === AI AGENT ===
+    # onchange (form-only, not persisted until save): copies the template body
+    # into body_arch/body_html ONLY when the current body is blank, so it can't
+    # clobber edits. Whitespace/empty-tag bodies count as blank.
+    @api.onchange("template_id")
+    def _onchange_template_id(self):
+        if self.template_id and self._body_is_blank():
+            self.body_arch = self.template_id.body_arch
+            self.body_html = (self.template_id.body_html
+                              or self.template_id.body_arch)
+
+    def _body_is_blank(self):
+        text = (self.body_arch or "").strip()
+        # Strip tags/entities cheaply to detect a visually-empty canvas.
+        stripped = re.sub(r"<[^>]+>", "", text).replace("&nbsp;", "").strip()
+        return not stripped
+
+    # === HUMAN ===
+    # Keep the masthead's month and "Volume X, No. Y" in the EDITOR in sync with
+    # the Issue Date, so the canvas shows the right month while you build the
+    # issue — not the month the template was first made for. (Print already
+    # resolves these; this makes the editor match without a preview.)
+    # === AI AGENT ===
+    # onchange (form-only): rewrites the date-driven TEXT masthead markers
+    # (data-elks-field = issue_month_year / issue_ref / city_state /
+    # lodge_number) inside body_arch + body_html. Never touches images or the
+    # lodge title (data-elks-field="lodge_name" is intentionally editor-owned).
+    # The markers are preserved (only their text changes), so Print/Preview still
+    # re-resolves everything as before — this is purely an editor convenience.
+    @api.onchange("issue_date")
+    def _onchange_issue_date_masthead(self):
+        if not self.issue_date:
+            return
+        markers = {
+            "issue_month_year": self.issue_date.strftime("%B %Y"),
+            "issue_ref": self.issue_ref or "",
+            "city_state": self.city_state or "",
+            "lodge_number": self.lodge_number or "",
+        }
+        if self.body_arch:
+            self.body_arch = self._fill_text_markers(self.body_arch, markers)
+        if self.body_html:
+            self.body_html = self._fill_text_markers(self.body_html, markers)
+
+    @staticmethod
+    def _fill_text_markers(html, markers):
+        """Set the text of each data-elks-field element found in <markers>,
+        leaving the element (and its marker attribute) in place so print can
+        still re-resolve it. Returns the HTML unchanged on any parse issue."""
+        try:
+            frag = lxml_html.fragment_fromstring(html, create_parent="div")
+        except Exception:
+            return html
+        changed = False
+        for el in frag.xpath(".//*[@data-elks-field]"):
+            key = el.get("data-elks-field")
+            if key in markers:
+                for child in list(el):
+                    el.remove(child)
+                el.text = markers[key]
+                changed = True
+        if not changed:
+            return html
+        inner = frag.text or ""
+        for child in frag:
+            inner += lxml_html.tostring(child, encoding="unicode")
+        return inner
+
+    # === HUMAN ===
+    # "Load Template" — fills the newsletter with the selected template's content.
+    # Use it on a blank issue, or to reset an issue back to the template. It asks
+    # for confirmation first (from the form button) because it replaces whatever
+    # is currently in the newsletter.
+    # === AI AGENT ===
+    # Explicit, user-initiated (re)apply of template_id (falls back to the default
+    # template). Overwrites body_arch/body_html — the view button carries a
+    # confirm= so this is never a surprise. UserError if the template is empty.
+    def action_load_template(self):
+        self.ensure_one()
+        tmpl = self.template_id or self._default_template()
+        if not tmpl or not (tmpl.body_arch and tmpl.body_arch.strip()):
+            raise UserError(_(
+                "The selected template has no content to load. Pick a template "
+                "that has a saved layout, or build the newsletter by dragging "
+                "blocks in."))
+        self.write({
+            "template_id": tmpl.id,
+            "body_arch": tmpl.body_arch,
+            "body_html": tmpl.body_html or tmpl.body_arch,
+        })
+        return True
+
+    # === HUMAN ===
     # Lock the issue as Final (kept editable-in-place is fine; this just marks it).
     # === AI AGENT ===
     # Simple state toggle.
@@ -313,6 +411,23 @@ class ElksBulletinIssue(models.Model):
         return {
             "type": "ir.actions.act_url",
             "url": f"/web/content/{attachment.id}?download=false",
+            "target": "new",
+        }
+
+    # === HUMAN ===
+    # "Preview (data)" — opens the newsletter as a fast HTML page (no PDF) with
+    # every dynamic block filled in from real lodge data, so you can check the
+    # data while editing without waiting on a PDF. Refresh the tab after edits.
+    # === AI AGENT ===
+    # Just points a new browser tab at the /elksbulletin/preview/<id> controller
+    # (controllers/main.py), which renders the same QWeb report as HTML via
+    # _render_qweb_html. No WeasyPrint, no attachment — near-instant. The PDF
+    # buttons above are unchanged; this is an additional, quicker data view.
+    def action_preview_html(self):
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_url",
+            "url": "/elksbulletin/preview/%d" % self.id,
             "target": "new",
         }
 
@@ -406,7 +521,7 @@ class ElksBulletinIssue(models.Model):
         # 1) Fill dynamic blocks (data-elks-block markers).
         for el in frag.xpath('.//*[@data-elks-block]'):
             key = el.get("data-elks-block")
-            inner = self._dynamic_block_html(key)
+            inner = self._dynamic_block_html(key, el)
             for child in list(el):
                 el.remove(child)
             el.text = None
@@ -805,7 +920,7 @@ class ElksBulletinIssue(models.Model):
 
     # === AI AGENT ===
     # Dispatch by block key. Wrapped so a data error never breaks the PDF.
-    def _dynamic_block_html(self, key):
+    def _dynamic_block_html(self, key, el=None):
         builders = {
             "new_members": self._html_new_members,
             "project_dollars": self._html_project_dollars,
@@ -816,11 +931,17 @@ class ElksBulletinIssue(models.Model):
             "events": self._html_events,
             "officers": self._html_officers,
             "in_memoriam": self._html_in_memoriam,
+            "leaderboard": self._html_leaderboard,
         }
         builder = builders.get(key)
         if not builder:
             return ""
         try:
+            # A few blocks read per-block Style-panel options off their element
+            # (the leaderboard: which month + layout; the calendar: which month).
+            # The rest take no element.
+            if key in ("leaderboard", "calendar"):
+                return builder(el)
             return builder()
         except Exception:  # pragma: no cover - defensive
             return ('<p style="color:#a00;font-style:italic;">'
@@ -921,12 +1042,21 @@ class ElksBulletinIssue(models.Model):
             elif getattr(mbr, "x_is_life_member", False):
                 meta_parts.append("Life Member")
             meta = " &#183; ".join(self._e(p) for p in meta_parts)
+            # Date of death, shown under the name (full month for a dignified
+            # look, e.g. "January 5, 2026").
+            dod_html = ""
+            if dod:
+                dod_text = "%s %d, %d" % (dod.strftime("%B"), dod.day, dod.year)
+                dod_html = ('<br/><span style="color:#6b6b6b;font-size:11px;'
+                            'font-style:italic;font-family:Georgia,serif;">'
+                            f'{self._e(dod_text)}</span>')
             entries.append(
                 '<span style="display:inline-block;vertical-align:top;'
                 'margin:4px 16px;text-align:center;font-family:Georgia,serif;'
                 'line-height:1.25;">'
                 f'<span style="font-weight:bold;color:{self._PURPLE_DEEP};'
                 f'font-size:14px;">{self._e(mbr.name)}</span>{self._vet_flag(mbr)}'
+                + dod_html
                 + (('<br/><span style="color:#555555;font-size:10.5px;'
                     'font-family:Arial,sans-serif;">'
                     f'{meta}</span>') if meta else "")
@@ -1175,8 +1305,8 @@ class ElksBulletinIssue(models.Model):
     # exists, render a throwaway new() publication with a stock theme. Any
     # failure falls back to the simple built-in grid. Depends on
     # elks_calendar_publisher (month/year are string selections '1'..'12'/'2026').
-    def _html_calendar(self):
-        d = self.issue_date or fields.Date.context_today(self)
+    def _html_calendar(self, el=None):
+        d = self._block_ref_date(el, "o_elks_cal_m", "data-elks-cal-month")
         month, year = str(d.month), str(d.year)
         try:
             Pub = self.env["elks.calendar.publication"].sudo()
@@ -1211,13 +1341,13 @@ class ElksBulletinIssue(models.Model):
             _logger.warning(
                 "elksbulletin: publisher calendar render failed; "
                 "using simple grid.", exc_info=True)
-        return self._html_calendar_simple()
+        return self._html_calendar_simple(d)
 
     # === AI AGENT ===
     # Fallback month grid from calendar.event, used only if the publisher
     # render is unavailable.
-    def _html_calendar_simple(self):
-        d = self.issue_date or fields.Date.context_today(self)
+    def _html_calendar_simple(self, ref=None):
+        d = ref or self.issue_date or fields.Date.context_today(self)
         y, m = d.year, d.month
         _, last = _calmod.monthrange(y, m)
         Event = self.env["calendar.event"].sudo()
@@ -1297,6 +1427,144 @@ class ElksBulletinIssue(models.Model):
             f'your good work is recorded.</div>'
         )
         return totals + reminder
+
+    # === HUMAN ===
+    # Volunteer Hours Leaderboard: the Elks who logged the most charity hours,
+    # shown as two boards — This Month and This Lodge Year — with the top
+    # volunteer featured large and places 2–10 below, plus a note on our duty to
+    # serve. The numbers come from the Elks Charity module so the newsletter and
+    # the website leaderboard always agree.
+    # === AI AGENT ===
+    # Calls the shared elks.charity.leaderboard.get_dual() (single source of
+    # truth) with THIS issue's date as the reference, so "This Month" is the
+    # issue's month and "This Lodge Year" is the Apr–Mar year around it. All copy
+    # is escaped via _e(). Guarded by _dynamic_block_html's try/except; if
+    # elkscharity is absent/errors the block prints a soft placeholder.
+    @staticmethod
+    def _fmt_hours(h):
+        h = float(h or 0)
+        return str(int(round(h))) if abs(h - round(h)) < 0.05 else f"{h:.1f}"
+
+    def _lb_board_html(self, title, subtitle, rows):
+        header = (
+            f'<div style="background:{self._PURPLE};color:#ffffff;'
+            f'text-align:center;font-family:Georgia,serif;font-weight:bold;'
+            f'padding:3px;border-radius:3px;margin-bottom:4px;">{self._e(title)}'
+            f'<div style="font-size:9px;font-weight:normal;letter-spacing:1px;'
+            f'text-transform:uppercase;">{self._e(subtitle)}</div></div>'
+        )
+        if not rows:
+            return header + ('<p style="text-align:center;font-style:italic;'
+                             'color:#777;font-size:11px;">No hours logged yet '
+                             'for this period.</p>')
+        champ = rows[0]
+        champion = (
+            f'<div style="text-align:center;border:2px solid {self._GOLD};'
+            f'border-radius:8px;background:#f3eefb;padding:7px 6px;'
+            f'margin-bottom:5px;">'
+            f'<div style="font-size:20px;font-weight:bold;'
+            f'color:{self._PURPLE_DEEP};line-height:1.1;">{self._e(champ["name"])}</div>'
+            f'<div><span style="font-size:26px;font-weight:900;'
+            f'color:{self._GOLD};">{self._fmt_hours(champ["hours"])}</span>'
+            f'<span style="color:{self._PURPLE};"> hours</span></div>'
+            f'<div style="font-size:8px;letter-spacing:1.5px;'
+            f'text-transform:uppercase;color:{self._PURPLE};">Top Volunteer</div>'
+            f'</div>'
+        )
+        rest = rows[1:]
+        body_rows = "".join(
+            f'<tr>'
+            f'<td style="width:20px;text-align:center;font-weight:bold;'
+            f'color:{self._PURPLE};">{r["rank"]}</td>'
+            f'<td style="padding:1px 6px;">{self._e(r["name"])}</td>'
+            f'<td style="text-align:right;white-space:nowrap;font-weight:bold;'
+            f'color:{self._GOLD};">{self._fmt_hours(r["hours"])}'
+            f'<span style="color:{self._PURPLE};font-weight:normal;'
+            f'font-size:10px;"> hrs</span></td></tr>'
+            for r in rest
+        )
+        table = (f'<table style="width:100%;border-collapse:collapse;'
+                 f'font-family:Georgia,serif;font-size:12px;">{body_rows}'
+                 f'</table>') if rest else ""
+        return header + champion + table
+
+    # Which month a data block references, from its Style-panel "Month shown"
+    # options. An exact override (data-<attr>="YYYY-MM") wins; otherwise a
+    # relative offset class shifts the issue month (<prefix>_prev = last month,
+    # <prefix>_prev2, <prefix>_next), so "preparing next month's issue early" is
+    # a one-time setting that tracks the issue date every month. Shared by the
+    # Leaderboard and the Lodge Calendar (each with its own class prefix / attr
+    # so their settings are independent).
+    # Gather the class string + a data attribute from an element AND all its
+    # ancestors. The Style-panel option writes onto the snippet ROOT
+    # (.s_elks_calendar / .s_elks_leaderboard), but the resolver hands the
+    # builder the inner data-elks-block <div>, so the setting lives on a parent.
+    @staticmethod
+    def _collect_from_ancestors(el, attr):
+        classes, found_attr = [], ""
+        node = el
+        while node is not None:
+            if isinstance(getattr(node, "tag", None), str):
+                if node.get("class"):
+                    classes.append(node.get("class"))
+                val = node.get(attr)
+                if val and not found_attr:
+                    found_attr = val.strip()
+            node = node.getparent()
+        return " %s " % " ".join(classes), found_attr
+
+    def _block_ref_date(self, el, class_prefix, attr):
+        ref = self.issue_date or fields.Date.context_today(self)
+        if el is None:
+            return ref
+        classes, exact = self._collect_from_ancestors(el, attr)
+        m = re.match(r"^\s*(\d{4})-(\d{1,2})\s*$", exact)
+        if m:
+            year, month = int(m.group(1)), int(m.group(2))
+            if 1 <= month <= 12:
+                return date(year, month, 1)
+        offset = 0
+        if (" %s_prev2 " % class_prefix) in classes:
+            offset = -2
+        elif (" %s_prev " % class_prefix) in classes:
+            offset = -1
+        elif (" %s_next " % class_prefix) in classes:
+            offset = 1
+        return ref + relativedelta(months=offset) if offset else ref
+
+    def _html_leaderboard(self, el=None):
+        LB = self.env["elks.charity.leaderboard"]
+        ref = self._block_ref_date(el, "o_elks_lb_m", "data-elks-lb-month")
+        data = LB.get_dual(ref_date=ref, limit=10, name_mode="full")
+        left = self._lb_board_html(
+            "This Month", data["month_label"], data["month"])
+        right = self._lb_board_html(
+            "This Lodge Year", data["year_label"], data["lodge_year"])
+        note = self._e(data.get("note") or "")
+        classes = (self._collect_from_ancestors(el, "class")[0]
+                   if el is not None else " ")
+        stacked = " o_elks_lb_stacked " in classes
+        if stacked:
+            # Each board full-width, one above the other.
+            boards = (f'<div style="margin-bottom:8px;">{left}</div>'
+                      f'<div>{right}</div>')
+        else:
+            # Two boards side by side across the block's width.
+            boards = (
+                '<table style="width:100%;border-collapse:collapse;'
+                'table-layout:fixed;"><tr>'
+                f'<td style="width:50%;vertical-align:top;padding-right:6px;">'
+                f'{left}</td>'
+                f'<td style="width:50%;vertical-align:top;padding-left:6px;">'
+                f'{right}</td>'
+                '</tr></table>')
+        return (
+            boards +
+            f'<div style="margin-top:6px;background:#f3eefb;border-left:4px '
+            f'solid {self._GOLD};padding:6px 10px;font-family:Georgia,serif;'
+            f'font-size:11px;line-height:1.4;color:{self._PURPLE_DEEP};">'
+            f'{note}</div>'
+        )
 
     # === AI AGENT ===
     # Human-readable label for an officer <position> code (e.g. "exalted_ruler"

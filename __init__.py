@@ -4,3 +4,4 @@
 # === AI AGENT ===
 # Only models so far; controllers/wizards get added as the editor phase lands.
 from . import models
+from . import controllers

@@ -17,8 +17,12 @@
         <field name="arch" type="xml">
             <form string="Newsletter" class="o_elksbulletin_form">
                 <header>
+                    <button name="action_preview_html" type="object"
+                            string="Preview (data)" class="btn-secondary"
+                            icon="fa-bolt"
+                            help="Fast HTML preview with real data — no PDF"/>
                     <button name="action_preview_pdf" type="object"
-                            string="Preview" class="btn-secondary"
+                            string="Preview PDF" class="btn-secondary"
                             icon="fa-eye"/>
                     <button name="action_print_pdf" type="object"
                             string="Print / Download PDF" class="btn-primary"
@@ -51,6 +55,11 @@
                             <field name="issue_date"/>
                             <field name="page_size"/>
                             <field name="template_id"/>
+                            <button name="action_load_template" type="object"
+                                    string="Load Template" class="btn-link"
+                                    icon="fa-download"
+                                    confirm="This replaces the current newsletter content with the selected template. Continue?"
+                                    help="Fill the newsletter with the selected template's content (replaces what's there)."/>
                         </group>
                         <group>
                             <field name="issue_ref" readonly="1"/>

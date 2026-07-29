@@ -59,6 +59,8 @@
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_message.svg"/>
             <t t-snippet="elksbulletin.s_elks_officers" string="Lodge Officers" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_officers.svg"/>
+            <t t-snippet="elksbulletin.s_elks_leaderboard_full" string="Volunteer Leaderboard (Full Width)" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_charity.svg"/>
             <t t-snippet="elksbulletin.s_elks_two_thirds" string="Two-Thirds + One-Third" group="lodge"/>
             <t t-snippet="elksbulletin.s_elks_three_columns" string="Three Columns" group="lodge"/>
             <t t-snippet="elksbulletin.s_elks_mailing" string="Mailing Panel" group="lodge"
@@ -86,6 +88,8 @@
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_members.svg"/>
             <t t-snippet="elksbulletin.s_elks_calendar" string="Lodge Calendar" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_calendar.svg"/>
+            <t t-snippet="elksbulletin.s_elks_leaderboard" string="Volunteer Leaderboard" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_charity.svg"/>
             <t t-snippet="elksbulletin.s_elks_page_break_inline" string="Page Break — Inline" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
             <t t-snippet="elksbulletin.s_elks_upcoming_events" string="Upcoming Events" group="lodge"
@@ -362,6 +366,31 @@
                 <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with fiscal-year charity totals plus the "report your hours" reminder when you Print / Preview.</p>
             </div>
         </div>
+    </template>
+
+    <!-- Volunteer Hours Leaderboard (top Elks by charity hours) -->
+    <template id="s_elks_leaderboard" name="Volunteer Leaderboard (Dynamic)">
+        <div class="s_elks_leaderboard o_elks_inner o_snippet_drop_in_only" data-name="Volunteer Leaderboard (Dynamic)">
+            <div class="o_elks_bar" style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:2px;border-radius:3px;margin-bottom:3px;">Volunteer Hours Leaderboard</div>
+            <div data-elks-block="leaderboard">
+                <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with the top volunteers this month and this lodge year (from the Elks Charity module) when you Print / Preview.</p>
+            </div>
+        </div>
+    </template>
+
+    <!-- Volunteer Hours Leaderboard — FULL-WIDTH section. Same data-elks-block
+         and .s_elks_leaderboard class as the inner-content version (so the same
+         Style-panel options apply), but a full-width structural section so it
+         can span the whole page instead of a single column. -->
+    <template id="s_elks_leaderboard_full" name="Volunteer Leaderboard (Full Width)">
+        <section class="s_elks_leaderboard o_mail_snippet_general o_elks_w_full pt8 pb8" data-name="Volunteer Leaderboard (Full Width)">
+            <div class="container" style="padding:2px 0;">
+                <div class="o_elks_bar" style="background:#5b3b8c;color:#ffffff;text-align:center;font-family:Georgia,serif;font-weight:bold;letter-spacing:1px;padding:2px;border-radius:3px;margin-bottom:3px;">Volunteer Hours Leaderboard</div>
+                <div data-elks-block="leaderboard">
+                    <p style="text-align:center;color:#777;font-style:italic;font-family:Arial,sans-serif;font-size:12px;margin:4px 0;">Auto-fills with the top volunteers this month and this lodge year (from the Elks Charity module) when you Print / Preview.</p>
+                </div>
+            </div>
+        </section>
     </template>
 
     <!-- Lodge Calendar (month grid of lodge events) -->

@@ -79,6 +79,9 @@ page-sized PDF (US Letter / Legal) via WeasyPrint. It does NOT send email.
   wkhtmltopdf for A/B diagnosis, and every render logs which engine ran.
 - `models/elks_bulletin_template.py` — `elks.bulletin.template` (name,
   is_default, body trio). New issues copy the default template's body.
+- `controllers/main.py` — GET `/elksbulletin/preview/<id>` (auth=user): renders
+  the report as HTML via `_render_qweb_html` for the fast "Preview (data)" button
+  (no PDF). `check_access("read")` gates it.
 
 **Dynamic blocks (auto-fill at print, `data-elks-block` / class markers):**
 New Members, Project Dollars (elkssecretary FY), Dues (aggregate counts),
@@ -86,8 +89,13 @@ Charity (elkscharity totals + reminder), Lodge Calendar (renders the
 elks_calendar_publisher calendar), Upcoming Events (approved elksevent
 project.tasks), Events (Odoo `event.event` — PUBLISHED only, teaser: title bar +
 date + first line + a link to the lodge `/event` page), Officer Roster
-(elks.officer.term), Message Block (officer byline auto-fill; Style-panel Officer
-picker — hand-edited titles are preserved), In Memoriam (members who passed the
+(elks.officer.term), Volunteer Hours Leaderboard (top Elks by charity hours —
+This Month + This Lodge Year, top volunteer featured large; from the shared
+`elks.charity.leaderboard` model; Style-panel "Month shown" relative offset +
+exact YYYY-MM override + side-by-side/stacked toggle; ships as both a drop-in
+inner block AND a full-width section; the block resolver passes the element to
+`_html_leaderboard` so these per-block options are read at print), Message Block (officer byline auto-fill;
+Style-panel Officer picker — hand-edited titles are preserved), In Memoriam (members who passed the
 month before the issue, with membership tenure computed at death, a veteran flag,
 and a Life/Honorary-Life-Member badge; inner-content block that drops inside a
 column), plus static Masthead banner / Section Bar / Mailing Panel / layout

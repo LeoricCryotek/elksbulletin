@@ -13,6 +13,10 @@
 //     vertical gap; use it to push a block (e.g. the Calendar) down the page.
 //   • Pin to page bottom (Style panel) — on any full-width block, drop it to the
 //     bottom of the page it lands on (the report's two-pass layout does the push).
+//   • Month shown (Style panel) — on the Leaderboard and the Lodge Calendar,
+//     pick which month the block references (relative to the issue, or exact
+//     YYYY-MM), so you can prepare an issue early. Read at print via
+//     elks.bulletin.issue._block_ref_date.
 //   • Page-turn preview — content after a Page Break is pushed down to the
 //     next red page-boundary line on the canvas, so the editor shows the page
 //     turn the way the PDF will print it.
@@ -79,12 +83,35 @@ export class ElksPinBottomOption extends BaseOptionComponent {
     static groups = ["base.group_user"];
 }
 
+// Volunteer Leaderboard (Style panel): pick which month the board covers and
+// whether the two boards sit side by side or stack full-width. "Which month" is
+// a relative offset class (o_elks_lb_m_prev, ...) read at print, so it tracks
+// the issue date every month; an exact "YYYY-MM" override (data-elks-lb-month)
+// wins when set. Matches both the drop-in-a-column and full-width versions
+// (both carry .s_elks_leaderboard).
+export class ElksLeaderboardOption extends BaseOptionComponent {
+    static template = "elksbulletin.LeaderboardOption";
+    static selector = ".s_elks_leaderboard";
+    static groups = ["base.group_user"];
+}
+
+// Lodge Calendar (Style panel): pick which month the calendar shows. Same
+// relative-offset-class + exact-YYYY-MM mechanism as the Leaderboard, with its
+// own class prefix (o_elks_cal_m_*) and data attribute (data-elks-cal-month) so
+// it's independent. Read at print by _html_calendar via _block_ref_date.
+export class ElksCalendarOption extends BaseOptionComponent {
+    static template = "elksbulletin.CalendarOption";
+    static selector = ".s_elks_calendar";
+    static groups = ["base.group_user"];
+}
+
 class ElksBulletinOptionsPlugin extends Plugin {
     static id = "elksbulletin.Options";
     resources = {
         builder_options: [
             ElksSizeOption, ElksMessageOption,
             ElksSpacerOption, ElksPinBottomOption,
+            ElksLeaderboardOption, ElksCalendarOption,
         ],
     };
 }

@@ -24,12 +24,12 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.8.0",
+    "version": "19.0.1.16.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.8.0
-===========================
+Elks Bulletin — v19.0.1.16.0
+============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
 page-sized document (US Letter / Legal) instead of an email.
@@ -66,6 +66,66 @@ Features
 
 Version history
 ---------------
+19.0.1.16.0 — The editor masthead now tracks the Issue Date. Changing the date
+rewrites the date-driven masthead markers (month + "Volume X, No. Y", plus
+city/state and lodge number) right in the editing canvas, so it stops showing the
+month the template was originally built for — no need to Preview to see the right
+month. Only text markers change; images and the editor-owned lodge title are left
+alone, and the markers are preserved so Print/Preview still re-resolves them.
+
+19.0.1.15.0 — Templates apply after create. Previously a template only populated
+an issue at create time, so picking a template on an existing (blank) issue did
+nothing. Now: choosing a template auto-loads its content WHEN the newsletter is
+still empty (never clobbers an issue you've already built), and a new "Load
+Template" button (with a confirm) fills/resets an issue from the selected template
+on demand. Empty detection ignores whitespace / empty wrapper tags.
+
+19.0.1.14.0 — Fix: the Calendar/Leaderboard "Month shown" setting had no effect.
+The Style-panel option writes its class/attribute onto the snippet ROOT, but the
+resolver handed the builder the inner data-elks-block element, which didn't carry
+it — so the setting was silently ignored (also affected the Leaderboard month +
+"Stack boards"). The month/flag lookups now walk up through ancestors to find the
+setting. Simplified the "Month shown" choices to Issue month / Next month / Last
+month (dropped "Two months back") on both blocks.
+
+19.0.1.13.0 — The Lodge Calendar now has the same Style-panel "Month shown"
+control as the Leaderboard: pick Issue month / Previous / Two months back / Next
+(a relative offset that tracks the issue date), or type an exact YYYY-MM — so you
+can send the newsletter out early and still show next month's calendar. The
+month-offset helper is now shared by both blocks (_block_ref_date), each with its
+own independent setting.
+
+19.0.1.12.0 — Fast "Preview (data)" button. Opens the newsletter as a plain HTML
+page with every dynamic block filled from real lodge data in a fraction of a
+second — no PDF, no WeasyPrint — so you can check the data while editing and just
+refresh after changes. Served by a new GET /elksbulletin/preview/<id> controller
+(auth=user, check_access("read")) that renders the SAME QWeb report as HTML via
+_render_qweb_html, so it's a faithful data preview (only true page breaks /
+continuation bars differ, since those need the PDF engine). The existing Preview
+PDF / Print buttons are unchanged.
+
+19.0.1.11.0 — In Memoriam now prints each member's date of death under their name
+(full month, e.g. "January 5, 2026"), from x_date_of_death on the member record,
+above the existing membership-tenure / Life-Member line.
+
+19.0.1.10.0 — Leaderboard layout + month controls. The Volunteer Leaderboard now
+has a Style-panel "Month shown" picker (Issue month / Previous / Two months back
+/ Next — a relative offset that tracks the issue date each month) plus an exact
+"YYYY-MM" override for one-off months, so you can prepare next month's issue and
+feature the right month. A new FULL-WIDTH Leaderboard section block spans the
+whole page (alongside the existing drop-in-a-column version), and a "Stack boards"
+toggle switches the two boards (This Month / This Lodge Year) between side-by-side
+and stacked full-width. The dynamic-block resolver now passes each block's element
+to its builder so these per-block options can be read at print.
+
+19.0.1.9.0 — New Volunteer Hours Leaderboard dynamic block. Ranks the Elks who
+logged the most charity hours, as two boards (This Month + This Lodge Year) with
+the top volunteer featured large and places 2–10 below, plus a note on our duty
+to serve. Numbers come from the shared elks.charity.leaderboard model in the
+Elks Charity module (all submitted hours, Elks only, current lodge year), the
+same source the public website leaderboard uses — so the two never disagree.
+Requires elkscharity 19.0.6.0+.
+
 19.0.1.8.0 — Layout controls. New Spacer block: an empty, resizable vertical gap
 (Style-panel Height — presets Small/Medium/Large/Extra-Large or a custom px
 value, written as the section's inline height so editor and PDF match). New "Pin
