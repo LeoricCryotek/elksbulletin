@@ -182,6 +182,18 @@ class IrActionsReport(models.Model):
     # own height can nudge later page breaks by a line or two, an accepted
     # tradeoff rather than looping to a fixed point.
     def _bulletin_insert_continuation_markers(self, html, base_url, fetcher):
+        # The continuation + pin-to-bottom two-pass is now OPT-IN and OFF by
+        # default: it re-renders and rewrites the whole document, and a bad
+        # measurement (a pinned block, or a story boundary) could insert a filler
+        # that halts pagination and drops content — a much worse failure than
+        # simply not drawing the auto "Continued on page #" bars. Enable it only
+        # once it's proven safe on a lodge's real content: system parameter
+        # elksbulletin.enable_layout_pass = 1. (The old
+        # elksbulletin.disable_layout_pass is still honored as a hard off.)
+        cfg = self.env["ir.config_parameter"].sudo()
+        if (not cfg.get_param("elksbulletin.enable_layout_pass")
+                or cfg.get_param("elksbulletin.disable_layout_pass")):
+            return html
         try:
             return self._bulletin_insert_continuation_markers_inner(
                 html, base_url, fetcher)
@@ -209,6 +221,14 @@ class IrActionsReport(models.Model):
         document = weasyprint.HTML(
             string=html, base_url=base_url, url_fetcher=fetcher,
         ).render()
+        # Diagnostic: how many pages the PLAIN resolved body produced, before we
+        # add any continuation markers or pin fillers. If this is already 1 while
+        # the newsletter clearly has more content, the collapse is in the content
+        # itself (e.g. an unbreakable box taller than the page), NOT this pass.
+        _logger.info(
+            "elksbulletin: layout pass 1 = %d page(s); %d story flow(s), "
+            "%d pinned block(s).",
+            len(document.pages), len(flow_containers), len(pinned))
 
         element_pages = defaultdict(set)
         # For pinned blocks we need the geometry of their principal box, keyed
@@ -264,8 +284,11 @@ class IrActionsReport(models.Model):
                 if not usable_bottom:
                     continue
                 gap = usable_bottom - outer_bottom - 4  # 4px safety
-                if gap < 8:
-                    continue  # already near the bottom; leave it
+                # Safety clamp: never insert a filler taller than the remaining
+                # page. A bad/zero measurement could otherwise inject a giant
+                # empty box that itself overflows the page and breaks pagination.
+                if gap < 8 or gap >= usable_bottom:
+                    continue  # already near the bottom, or measurement is off
                 filler = etree.Element(
                     "div", **{"class": "s_elks_pin_filler"})
                 filler.set("style", "height:%dpx;" % int(gap))

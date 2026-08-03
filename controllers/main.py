@@ -51,26 +51,48 @@ class ElksBulletinPreview(http.Controller):
             html = html.decode("utf-8")
 
         # Screen-only CSS so the preview looks like a real sheet of paper
-        # (Letter/Legal width, page margins, centered on a grey desk) instead of
-        # flowing at full browser width. This makes the data preview reflect the
-        # printed layout — text wraps and images size as they will on paper —
-        # without affecting the PDF (WeasyPrint uses @page, not this).
+        # (Letter width, page margins, centered on a grey desk) instead of
+        # flowing at full browser width. Targets ".article" — Odoo's guaranteed
+        # report wrapper — and is injected at the END of <body> so it beats the
+        # report's own in-body <style>. The PDF is unaffected (WeasyPrint sizes
+        # by @page, ignoring @media screen). Legal issues just show a slightly
+        # narrower sheet than their true 8.5in — fine for a data preview.
         page_w = "8.5in"
-        pad = "0.42in 0.42in 0.58in 0.42in"
+        # Preview-only paper CSS. Two things to note:
+        #   1. `.article` is pinned to 8.5in wide and centered so the
+        #      browser shows a true-size sheet (not scaled to viewport).
+        #   2. Images MUST get max-width:100% + height:auto or a large
+        #      image (like the "Volunteers Needed" flyer) renders at its
+        #      native pixel size and pushes its column past the 8.5in
+        #      article, giving the false impression that the preview is
+        #      "scaling" — the article is fine, one runaway <img> is
+        #      just overflowing it. `object-fit:contain` keeps aspect
+        #      ratio inside the constraint.
+        # Constrain the whole <body> (always present, unlike an inner wrapper
+        # class) to a centered Letter-width sheet. Targeting body is bulletproof;
+        # .article-based attempts didn't take because the report's own in-body
+        # styles / structure won out. Images and tables are clamped to the sheet
+        # width so a large flyer can't overflow and make it look like the page is
+        # "scaling".
         paper_css = (
             "<style>@media screen{"
-            "html,body{background:#dfdce6!important;margin:0!important;}"
-            ".article{padding:18px 0!important;}"
-            ".o_elksbulletin{width:%s!important;max-width:%s!important;"
-            "margin:0 auto!important;padding:%s!important;background:#fff!important;"
-            "box-sizing:border-box!important;"
-            "box-shadow:0 0 0 1px #cfcfcf,0 6px 24px rgba(0,0,0,.25)!important;}"
-            ".o_elksbulletin img{max-height:9in;}"
-            "}</style>" % (page_w, page_w, pad)
+            "html{background:#dfdce6 !important;}"
+            "body{width:%s !important;max-width:%s !important;"
+            "margin:18px auto !important;"
+            "padding:0.42in 0.42in 0.58in 0.42in !important;"
+            "background:#ffffff !important;box-sizing:border-box !important;"
+            "overflow-x:hidden !important;"
+            "box-shadow:0 0 0 1px #cfcfcf,0 6px 24px rgba(0,0,0,.25) !important;}"
+            "body .container,body .container-fluid{"
+            "width:100% !important;max-width:100% !important;}"
+            "body img{max-width:100% !important;height:auto !important;"
+            "max-height:9in !important;}"
+            "body table{max-width:100% !important;}"
+            "}</style>" % (page_w, page_w)
         )
-        if "</head>" in html:
-            html = html.replace("</head>", paper_css + "</head>", 1)
+        if "</body>" in html:
+            html = html.replace("</body>", paper_css + "</body>", 1)
         else:
-            html = paper_css + html
+            html = html + paper_css
         return request.make_response(
             html, headers=[("Content-Type", "text/html; charset=utf-8")])

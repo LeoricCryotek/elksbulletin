@@ -256,11 +256,18 @@
                         .s_elks_in_memoriam table[style*="border-radius"] {
                             padding: 6px 10px !important;
                         }
-                        /* Inner-content dynamic blocks (19.0.1.1.0+): keep each
-                           whole across page turns, tight vertical rhythm. */
+                        /* Inner-content dynamic blocks (19.0.1.1.0+): tight
+                           vertical rhythm. break-inside is AUTO (was avoid): a
+                           tall dynamic block — e.g. the Leaderboard squeezed into
+                           a narrow column, or the Calendar — must be allowed to
+                           split across pages. When such a block was taller than
+                           the printable page AND unbreakable, WeasyPrint stopped
+                           paginating and every block after it vanished (the "PDF
+                           stops after 1 page" bug). Splitting is far better than
+                           dropping content. */
                         .o_elks_inner {
                             display: block;
-                            break-inside: avoid; page-break-inside: avoid;
+                            break-inside: auto; page-break-inside: auto;
                             margin: 0 0 4px;
                             font-size: 11.5px; line-height: 1.15;
                         }
@@ -296,10 +303,14 @@
                         .o_mail_snippet_general {
                             display: block; width: 100%;
                             box-sizing: border-box; font-size: 11.5px;
-                            break-inside: avoid; margin-bottom: 5px !important;
+                            break-inside: auto; margin-bottom: 5px !important;
                             padding-top: 2px !important; padding-bottom: 2px !important;
                             line-height: 1.15;
                         }
+                        /* Rows/columns must be able to split across pages too —
+                           a flex row taller than the page is otherwise an
+                           unbreakable box that halts pagination. */
+                        .row, [class*="col-"] { break-inside: auto; page-break-inside: auto; }
                         /* Higher specificity than the bare `p` rule, so it must
                            carry the same Bulletin leading or it would silently
                            win and revert paragraphs inside sections to 1.15. */

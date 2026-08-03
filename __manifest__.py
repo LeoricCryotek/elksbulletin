@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.22.0",
+    "version": "19.0.1.25.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.22.0
+Elks Bulletin — v19.0.1.25.0
 ============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -66,6 +66,33 @@ Features
 
 Version history
 ---------------
+19.0.1.25.0 — Real fixes for "PDF stops paginating." Root cause: an unbreakable
+box taller than the printable page halts WeasyPrint, dropping everything after
+it. Two independent triggers, both addressed: (1) the continuation/pin two-pass
+(confirmed by the disable_layout_pass kill switch) is now OPT-IN / OFF by default
+— enable with elksbulletin.enable_layout_pass=1 only after it's proven safe; (2)
+tall content — a dynamic block (e.g. the Leaderboard squeezed into a narrow
+column) or the Calendar — is now allowed to SPLIT across pages instead of being
+kept whole (break-inside on .o_elks_inner / .o_mail_snippet_general / .row / cols
+changed from avoid to auto). Splitting beats dropping. Also: the "Preview (data)"
+paper sheet now constrains the whole <body> (bulletproof) instead of an inner
+class, so it renders as a true 8.5in sheet.
+
+19.0.1.24.0 — Diagnostics + guards for the "PDF stops after 1 page" report
+(embedded images were NOT the cause — all small in the failing PDF). Adds: (1) an
+INFO log "layout pass 1 = N page(s)" showing how many pages the PLAIN resolved
+body makes before any markers/fillers — isolates content-vs-layout-pass; (2) a
+kill switch (system parameter elksbulletin.disable_layout_pass=1) to skip the
+continuation/pin two-pass entirely for A/B testing; (3) a safety clamp so the
+pin-to-bottom filler can never be taller than the remaining page (a bad
+measurement could otherwise inject a giant box that breaks pagination).
+
+19.0.1.23.0 — Fix: "Preview (data)" still showed full browser width. The paper-
+width CSS now targets ".article" (Odoo's always-present report wrapper) and is
+injected at the END of <body> so it beats the report's own in-body styles — the
+earlier <head> injection on an inner class was being overridden. The preview now
+renders as a centered 8.5in sheet with page margins on a grey desk.
+
 19.0.1.22.0 — Fix: PDF "stops after 1 page." A tall portrait image (e.g. a large
 Exalted-Ruler photo) scaled to full column width could exceed the printable page
 height; because an image is an unbreakable box, WeasyPrint abandoned pagination
