@@ -114,4 +114,34 @@
         </BuilderRow>
     </t>
 
+    <!-- New Members: which month's initiations to feature (relative to the
+         issue, an exact YYYY-MM, or a custom From/To range). Overrides the
+         issue's "New Members Source" field when set. Read at Print/Preview by
+         elks.bulletin.issue._new_member_window. -->
+    <t t-name="elksbulletin.NewMembersOption">
+        <BuilderRow label.translate="Month shown"
+                    tooltip.translate="Overrides the 'New Members Source' field on the issue. Leave on 'Issue default' to use that field.">
+            <BuilderSelect>
+                <BuilderSelectItem classAction="''">Issue default</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_nm_m_prev'">Last month</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_nm_m_issue'">Issue month</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_nm_m_prev2'">Two months ago</BuilderSelectItem>
+                <BuilderSelectItem classAction="'o_elks_nm_m_next'">Next month</BuilderSelectItem>
+            </BuilderSelect>
+        </BuilderRow>
+        <BuilderRow label.translate="Exact month (YYYY-MM)">
+            <BuilderTextInput dataAttributeAction="'elksNmMonth'"
+                              placeholder.translate="e.g. 2026-07"/>
+        </BuilderRow>
+        <BuilderRow label.translate="Range start (YYYY-MM-DD)"
+                    tooltip.translate="Set both Range dates to feature everyone initiated in that window.">
+            <BuilderTextInput dataAttributeAction="'elksNmFrom'"
+                              placeholder.translate="e.g. 2026-06-01"/>
+        </BuilderRow>
+        <BuilderRow label.translate="Range end (YYYY-MM-DD)">
+            <BuilderTextInput dataAttributeAction="'elksNmTo'"
+                              placeholder.translate="e.g. 2026-07-31"/>
+        </BuilderRow>
+    </t>
+
 </templates>

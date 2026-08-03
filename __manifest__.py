@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.19.0",
+    "version": "19.0.1.22.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.19.0
+Elks Bulletin — v19.0.1.22.0
 ============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -66,6 +66,29 @@ Features
 
 Version history
 ---------------
+19.0.1.22.0 — Fix: PDF "stops after 1 page." A tall portrait image (e.g. a large
+Exalted-Ruler photo) scaled to full column width could exceed the printable page
+height; because an image is an unbreakable box, WeasyPrint abandoned pagination
+and dropped every block after it. Images are now capped to max-height 9in (aspect
+ratio preserved) so they always fit on a page and the rest paginates. Also: the
+"Preview (data)" HTML view now renders as a real Letter-width sheet (page margins,
+centered on a grey desk) instead of flowing at full browser width, so the on-
+screen preview reflects the printed 8.5×11 layout. (Tip: very large photos still
+look best resized down in the editor.)
+
+19.0.1.21.0 — New Members block gets an on-block "Month shown" control in the
+Style panel (like the Calendar and Leaderboard): Last month / Issue month / Two
+months ago / Next month, an exact YYYY-MM, or a custom From/To range — all
+filtering on the member's initiation date. Set on the block it overrides the
+issue's "New Members Source" field; left on "Issue default" it uses that field.
+
+19.0.1.20.0 — Leaderboard board headings now match what's shown. The left board
+is titled by the month relative to the issue — "This Month", "Last Month", "Two
+Months Ago", "Next Month", "Featured Month" for a far exact month, or "Selected
+Range" for a custom range — instead of always saying "This Month". The right
+board is now just "Lodge Year" (the year is in its subtitle), so it reads
+correctly whichever month the left board features.
+
 19.0.1.19.0 — Leaderboard "This Month" board can now cover a custom date range,
 not just a single month. New Style-panel "Range start" / "Range end" (YYYY-MM-DD)
 fields on the Leaderboard block: set both and the left board ranks over that

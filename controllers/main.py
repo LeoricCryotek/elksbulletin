@@ -49,5 +49,28 @@ class ElksBulletinPreview(http.Controller):
             report.report_name, issue.ids)
         if isinstance(html, bytes):
             html = html.decode("utf-8")
+
+        # Screen-only CSS so the preview looks like a real sheet of paper
+        # (Letter/Legal width, page margins, centered on a grey desk) instead of
+        # flowing at full browser width. This makes the data preview reflect the
+        # printed layout — text wraps and images size as they will on paper —
+        # without affecting the PDF (WeasyPrint uses @page, not this).
+        page_w = "8.5in"
+        pad = "0.42in 0.42in 0.58in 0.42in"
+        paper_css = (
+            "<style>@media screen{"
+            "html,body{background:#dfdce6!important;margin:0!important;}"
+            ".article{padding:18px 0!important;}"
+            ".o_elksbulletin{width:%s!important;max-width:%s!important;"
+            "margin:0 auto!important;padding:%s!important;background:#fff!important;"
+            "box-sizing:border-box!important;"
+            "box-shadow:0 0 0 1px #cfcfcf,0 6px 24px rgba(0,0,0,.25)!important;}"
+            ".o_elksbulletin img{max-height:9in;}"
+            "}</style>" % (page_w, page_w, pad)
+        )
+        if "</head>" in html:
+            html = html.replace("</head>", paper_css + "</head>", 1)
+        else:
+            html = paper_css + html
         return request.make_response(
             html, headers=[("Content-Type", "text/html; charset=utf-8")])

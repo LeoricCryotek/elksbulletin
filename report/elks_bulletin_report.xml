@@ -192,7 +192,15 @@
                              Install one on the server for emoji to print. -->
                         body { font-family: Georgia, 'Times New Roman', 'Elks Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Noto Emoji', 'Symbola', serif; color: #111; }
                         * { box-sizing: border-box; }
-                        img { max-width: 100%; height: auto; }
+                        /* Cap image height BELOW the printable page. A portrait
+                           photo scaled to full column width can exceed the page
+                           height; an image is an unbreakable box, so one taller
+                           than the page makes WeasyPrint abandon pagination and
+                           drop every block after it (the "stops after 1 page"
+                           bug). max-height clamps it (aspect ratio preserved), so
+                           it always fits on a page and the rest paginates. 9in
+                           is under the Letter printable height (10in). */
+                        img { max-width: 100%; max-height: 9in; height: auto; }
                         .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
 
                         /* -------- Compact "Grand Lodge" print density --------

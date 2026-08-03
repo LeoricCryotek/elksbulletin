@@ -958,9 +958,9 @@ class ElksBulletinIssue(models.Model):
             return ""
         try:
             # A few blocks read per-block Style-panel options off their element
-            # (the leaderboard: which month + layout; the calendar: which month).
-            # The rest take no element.
-            if key in ("leaderboard", "calendar"):
+            # (leaderboard: month + layout; calendar: month; new_members: month
+            # /range). The rest take no element.
+            if key in ("leaderboard", "calendar", "new_members"):
                 return builder(el)
             return builder()
         except Exception:  # pragma: no cover - defensive
@@ -1094,9 +1094,29 @@ class ElksBulletinIssue(models.Model):
         _, last = _calmod.monthrange(ref.year, ref.month)
         return date(ref.year, ref.month, 1), date(ref.year, ref.month, last)
 
-    def _new_member_window(self):
-        """(start, end) initiation-date window for the New Members block, from
-        the New Members Source setting. Relative modes track the Issue Date."""
+    def _new_member_window(self, el=None):
+        """(start, end) initiation-date window for the New Members block.
+
+        A per-block Style-panel setting (Month shown / Exact month / custom
+        Range on the block itself) takes precedence; if none is set on the
+        block, fall back to the issue's "New Members Source" field."""
+        if el is not None:
+            classes, month_attr = self._collect_from_ancestors(
+                el, "data-elks-nm-month")
+            frm = self._collect_from_ancestors(el, "data-elks-nm-from")[1]
+            to = self._collect_from_ancestors(el, "data-elks-nm-to")[1]
+            dre = r"^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$"
+            if re.match(dre, frm or "") and re.match(dre, to or ""):
+                return (fields.Date.to_date(frm.strip()),
+                        fields.Date.to_date(to.strip()))
+            if "o_elks_nm_m_" in classes or (month_attr or "").strip():
+                return self._month_bounds(
+                    self._block_ref_date(el, "o_elks_nm_m", "data-elks-nm-month"))
+        return self._form_new_member_window()
+
+    def _form_new_member_window(self):
+        """(start, end) window from the issue's New Members Source field.
+        Relative modes track the Issue Date."""
         d = self.issue_date or fields.Date.context_today(self)
         mode = self.new_member_month or "fy"
         if mode == "range":
@@ -1115,8 +1135,8 @@ class ElksBulletinIssue(models.Model):
             return self._month_bounds(date(d.year, int(mode), 1))
         return self._fiscal_year_range()  # "fy"
 
-    def _html_new_members(self):
-        start, end = self._new_member_window()
+    def _html_new_members(self, el=None):
+        start, end = self._new_member_window(el)
         Partner = self.env["res.partner"].sudo()
         members = Partner.search([
             ("x_is_member", "=", True),
@@ -1591,10 +1611,18 @@ class ElksBulletinIssue(models.Model):
             month_label = LB.range_label(frm.strip(), to.strip())
             left = self._lb_board_html("Selected Range", month_label, month_rows)
         else:
+            # Title reflects which month is shown relative to the issue, so it
+            # reads correctly when the board is set to a prior/next month.
+            issue_d = self.issue_date or fields.Date.context_today(self)
+            delta = (ref.year - issue_d.year) * 12 + (ref.month - issue_d.month)
+            month_title = {
+                0: "This Month", -1: "Last Month", -2: "Two Months Ago",
+                1: "Next Month",
+            }.get(delta, "Featured Month")
             left = self._lb_board_html(
-                "This Month", data["month_label"], data["month"])
+                month_title, data["month_label"], data["month"])
         right = self._lb_board_html(
-            "This Lodge Year", data["year_label"], data["lodge_year"])
+            "Lodge Year", data["year_label"], data["lodge_year"])
         note = self._e(data.get("note") or "")
         classes = (self._collect_from_ancestors(el, "class")[0]
                    if el is not None else " ")

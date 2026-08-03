@@ -105,6 +105,16 @@ export class ElksCalendarOption extends BaseOptionComponent {
     static groups = ["base.group_user"];
 }
 
+// New Members (Style panel): pick which month's initiations to feature, or a
+// custom date range — on the block itself. Own class prefix (o_elks_nm_m_*) and
+// attributes (data-elks-nm-month / -from / -to). When set here it overrides the
+// issue's "New Members Source" field; read at print by _new_member_window.
+export class ElksNewMembersOption extends BaseOptionComponent {
+    static template = "elksbulletin.NewMembersOption";
+    static selector = ".s_elks_new_members";
+    static groups = ["base.group_user"];
+}
+
 class ElksBulletinOptionsPlugin extends Plugin {
     static id = "elksbulletin.Options";
     resources = {
@@ -112,6 +122,7 @@ class ElksBulletinOptionsPlugin extends Plugin {
             ElksSizeOption, ElksMessageOption,
             ElksSpacerOption, ElksPinBottomOption,
             ElksLeaderboardOption, ElksCalendarOption,
+            ElksNewMembersOption,
         ],
     };
 }
