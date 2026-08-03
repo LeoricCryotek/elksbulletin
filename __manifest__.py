@@ -67,9 +67,9 @@ Features
 Version history
 ---------------
 19.0.1.29.9 — Footer: fix the "· B.P.O.E." separator rendering as "·B.P.O.E."
-(dot jammed against the B). The CSS content used a hex escape (\00B7) for the
-middle dot, and CSS consumes the single space right after a hex escape as its
-terminator — swallowing the space before "B.P.O.E.". Replaced it with the
+(dot jammed against the B). The CSS content used a CSS hex escape (U+00B7) for
+the middle dot, and CSS consumes the single space right after a hex escape as
+its terminator — swallowing the space before "B.P.O.E.". Replaced it with the
 literal · character so both spaces are preserved.
 
 19.0.1.29.8 — Masthead: add top padding between the purple top bar and the
