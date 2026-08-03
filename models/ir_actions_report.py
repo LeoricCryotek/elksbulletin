@@ -282,14 +282,16 @@ class IrActionsReport(models.Model):
         # Without this, Playwright looks for its own un-downloaded browser and
         # fails ("Executable doesn't exist ..."). On Debian the binary is
         # /usr/bin/chromium (apt package `chromium`, not `chromium-browser`).
-        import shutil
-        exe = (self.env["ir.config_parameter"].sudo().get_param(
-                   "elksbulletin.chromium_path")
-               or shutil.which("chromium")
-               or shutil.which("chromium-browser")
-               or shutil.which("google-chrome")
-               or shutil.which("google-chrome-stable")
-               or shutil.which("chrome"))
+        # Browser selection. DEFAULT is Playwright's OWN bundled browser build
+        # (install it with `playwright install chromium`), because Playwright
+        # pins its driver to a specific browser revision — pointing it at a
+        # much newer SYSTEM chromium (e.g. Debian's 151) makes the CDP pipe
+        # handshake fail and the browser dies on launch with SIGTRAP /
+        # "Target ... has been closed". Only use a system binary when the admin
+        # explicitly opts in via elksbulletin.chromium_path (and accepts the
+        # version-match caveat).
+        exe = self.env["ir.config_parameter"].sudo().get_param(
+            "elksbulletin.chromium_path")
         launch_kwargs = {"args": ["--no-sandbox"]}
         if exe:
             launch_kwargs["executable_path"] = exe

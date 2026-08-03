@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.2",
+    "version": "19.0.1.29.4",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,21 @@ Features
 
 Version history
 ---------------
+19.0.1.29.4 — Default to Playwright's OWN bundled Chromium build instead of
+auto-detecting a system binary. A system chromium much newer than Playwright's
+pinned revision (e.g. Debian 151 vs Playwright 1.62) dies on launch with
+SIGTRAP / "Target ... has been closed" because the CDP handshake mismatches.
+Now: leave elksbulletin.chromium_path UNSET to use the matched bundled browser
+(run `playwright install chromium` as the Odoo service user); set it only to
+force a specific system binary, with the version-match caveat.
+
+19.0.1.29.3 — Browser detection now also probes absolute paths
+(/usr/bin/chromium, /snap/bin/chromium, ...) directly, because shutil.which()
+misses binaries when systemd runs Odoo with a stripped PATH that omits
+/usr/bin — the cause of "Executable doesn't exist ..." even with chromium
+installed. Setting elksbulletin.chromium_path=/usr/bin/chromium is the
+guaranteed override.
+
 19.0.1.29.2 — Chromium/Playwright now AUTO-DETECTS a system chrome/chromium
 binary on PATH (chromium, chromium-browser, google-chrome, ...) and uses it as
 Playwright's executable_path. Without this, Playwright looked for its own
