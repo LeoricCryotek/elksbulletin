@@ -468,6 +468,15 @@
                            spans the banner even if an inline width was stripped
                            (some HTML sanitizers drop table style widths). */
                         .s_elks_masthead table { width: 100% !important; }
+                        /* Breathing room between the purple top bar (date | URL
+                           | Vol/No.) and the logo | title | photo row below it —
+                           otherwise the logo, the "Lewiston Elks Lodge" script
+                           line and the building photo butt right up against the
+                           top bar. `table + table` targets the middle row's
+                           table (the one right after the top-bar table); its
+                           cells get extra top padding. Applies at render to the
+                           saved masthead, so it fixes existing issues too. */
+                        .s_elks_masthead table + table td { padding-top: 18px !important; }
 
                         /* Spacer block: an empty vertical gap. Its inline height
                            prints as-is; the editor-only "Spacer" label is hidden.

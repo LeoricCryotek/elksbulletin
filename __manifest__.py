@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.6",
+    "version": "19.0.1.29.8",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,20 @@ Features
 
 Version history
 ---------------
+19.0.1.29.8 — Masthead: add top padding between the purple top bar and the
+logo | "Lewiston Elks Lodge" title | building-photo row, which previously sat
+flush against the top bar. Report-CSS rule (.s_elks_masthead table + table td),
+so it applies to existing saved issues at render, not just newly-dropped
+mastheads.
+
+19.0.1.29.7 — Actually fix the double footer. 29.6 tried to strip the CSS
+@page footer and keep an injected Playwright template, but the strip didn't
+take and both still printed (the right-aligned copies overlapped so only the
+left/centre looked doubled). Reversed the approach: Chromium 151 renders the
+report's CSS @page @bottom-* footer fine on its own, so we now DROP the injected
+footer template (and the strip) entirely and let the CSS footer be the single
+source. Removed the now-dead _bulletin_chromium_footer helper.
+
 19.0.1.29.6 — Fix the DOUBLE page-number footer under the Chromium engine.
 Chromium 151 renders CSS @page margin boxes (@bottom-left/center/right), so the
 report's WeasyPrint footer AND the injected Playwright footer_template both

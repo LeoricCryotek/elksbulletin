@@ -180,11 +180,12 @@ class IrActionsReport(models.Model):
     # WeasyPrint path uses — so Chromium renders fully offline with no auth round
     # trip — then convert with Chromium. Two backends, tried in order:
     #   1. Playwright (page.pdf): honours @page size/margins via
-    #      prefer_css_page_size, prints backgrounds, and draws a footer_template
-    #      that reproduces the WeasyPrint @bottom-* page-number footer.
-    #   2. A system chromium/chrome binary via `--headless --print-to-pdf`
-    #      (no custom footer; --no-pdf-header-footer). Path can be pinned with
-    #      the system parameter elksbulletin.chromium_path.
+    #      prefer_css_page_size and prints backgrounds. The page-number footer
+    #      comes from the report's CSS @page @bottom-* margin boxes, which
+    #      Chromium renders itself (so we do NOT inject a footer template — that
+    #      would double it).
+    #   2. A system chromium/chrome binary via `--headless --print-to-pdf`.
+    #      Path can be pinned with the system parameter elksbulletin.chromium_path.
     # Any failure raises to the dispatcher, which degrades to wkhtmltopdf.
     def _render_bulletin_chromium(self, report_ref, res_ids, data):
         report = self._get_report(report_ref)
@@ -195,12 +196,6 @@ class IrActionsReport(models.Model):
         base_url = icp.get_param("web.base.url") or ""
         fetcher = self._bulletin_url_fetcher(base_url)
         html = self._bulletin_inline_resources(html, base_url, fetcher)
-        # Strip the CSS @page footer margin-boxes (@bottom-left/center/right).
-        # Those are the WeasyPrint page-number footer — but Chromium 151 ALSO
-        # renders @page margin boxes, so together with the footer_template we
-        # inject via Playwright they print the footer TWICE, overlapping. On the
-        # Chromium path the template owns the footer, so remove the CSS boxes.
-        html = re.sub(r"@bottom-(?:left|center|right)\s*\{[^{}]*\}", "", html)
         # Make Chromium honour our background colours/gradients (the masthead
         # bar, leaderboard shading) even on the CLI path where there's no
         # print_background flag: print-color-adjust:exact forces them to print.
@@ -281,7 +276,6 @@ class IrActionsReport(models.Model):
             from playwright.sync_api import sync_playwright
         except Exception:
             return self._bulletin_chromium_pdf_cli(html, legal)
-        footer = self._bulletin_chromium_footer(doc)
         # Reuse a system-installed chromium/chrome so the server only needs the
         # small `playwright` Python package — NOT Playwright's ~300MB bundled
         # browser download (which also needs `playwright install`).
@@ -316,12 +310,14 @@ class IrActionsReport(models.Model):
                     page = browser.new_page()
                     page.set_content(html, wait_until="load")
                     page.emulate_media(media="print")
+                    # NO display_header_footer / footer_template: Chromium 151
+                    # renders the report's CSS @page @bottom-* margin boxes
+                    # (lodge · B.P.O.E. / Page N of M / month) itself, so an
+                    # injected footer template would print a SECOND, offset copy
+                    # on top of it. Let the CSS footer own the bottom margin.
                     pdf = page.pdf(
                         prefer_css_page_size=True,  # honour report @page size
                         print_background=True,
-                        display_header_footer=True,
-                        header_template="<span></span>",
-                        footer_template=footer,
                     )
                 finally:
                     browser.close()
@@ -362,28 +358,6 @@ class IrActionsReport(models.Model):
                     resource.setrlimit(resource.RLIMIT_AS, (soft, hard))
                 except Exception:
                     pass
-
-    # === AI AGENT ===
-    # Chromium print footer that reproduces the WeasyPrint @bottom-* boxes:
-    # lodge name (left), "Page N of M" (centre), issue month (right). Chromium
-    # substitutes .pageNumber / .totalPages; font-size must be set inline or the
-    # footer renders microscopic.
-    def _bulletin_chromium_footer(self, doc):
-        from markupsafe import escape as _esc
-        lodge = str(_esc(getattr(doc, "lodge_name", "") or "")) if doc else ""
-        month = ""
-        if doc and getattr(doc, "issue_date", False):
-            month = str(_esc(doc.issue_date.strftime("%B %Y")))
-        # NB: plain concatenation, not %-formatting — the CSS contains literal
-        # '%' (width:100%) that would be misread as format specifiers.
-        return (
-            '<div style="width:100%;font:8.5pt Arial,sans-serif;color:#3f2566;'
-            'padding:0 0.42in;box-sizing:border-box;">'
-            '<span style="float:left;">' + lodge + ' · B.P.O.E.</span>'
-            '<span style="float:right;">' + month + '</span>'
-            '<span style="display:block;text-align:center;font-weight:bold;">'
-            'Page <span class="pageNumber"></span> of '
-            '<span class="totalPages"></span></span></div>')
 
     # === AI AGENT ===
     # CLI fallback: find a chromium/chrome binary and print via
