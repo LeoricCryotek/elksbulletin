@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.0",
+    "version": "19.0.1.29.1",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,14 @@ Features
 
 Version history
 ---------------
+19.0.1.29.1 — Fixes for the Chromium engine's first live run: (1) the print
+footer and (2) the "Preview (data)" paper CSS both used %-string formatting on
+CSS that contains a literal '%' (width:100%), which raised ValueError /
+TypeError — switched both to plain concatenation. (3) Added a <base> tag in the
+Chromium path so resources we don't inline (the calendar's FontAwesome
+stylesheet + font) still resolve over HTTP from the live site. Preview and
+Chromium printing now work.
+
 19.0.1.29.0 — New PDF engine option: headless CHROMIUM. Set the system parameter
 elksbulletin.pdf_engine=chromium to render the newsletter with a real browser
 engine (Blink). It's the only engine that gives BOTH reliable pagination on this

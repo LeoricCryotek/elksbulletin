@@ -74,10 +74,14 @@ class ElksBulletinPreview(http.Controller):
         # styles / structure won out. Images and tables are clamped to the sheet
         # width so a large flyer can't overflow and make it look like the page is
         # "scaling".
+        # Plain concatenation, NOT %-formatting: this CSS contains literal '%'
+        # (max-width:100%) that %-formatting would misread as format specifiers
+        # (that once 500'd the whole preview). page_w is the only variable.
         paper_css = (
             "<style>@media screen{"
             "html{background:#dfdce6 !important;}"
-            "body{width:%s !important;max-width:%s !important;"
+            "body{width:" + page_w + " !important;max-width:" + page_w
+            + " !important;"
             "margin:18px auto !important;"
             "padding:0.42in 0.42in 0.58in 0.42in !important;"
             "background:#ffffff !important;box-sizing:border-box !important;"
@@ -88,7 +92,7 @@ class ElksBulletinPreview(http.Controller):
             "body img{max-width:100% !important;height:auto !important;"
             "max-height:9in !important;}"
             "body table{max-width:100% !important;}"
-            "}</style>" % (page_w, page_w)
+            "}</style>"
         )
         if "</body>" in html:
             html = html.replace("</body>", paper_css + "</body>", 1)

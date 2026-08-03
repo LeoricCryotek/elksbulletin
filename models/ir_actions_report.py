@@ -199,7 +199,16 @@ class IrActionsReport(models.Model):
         # print_background flag: print-color-adjust:exact forces them to print.
         inject = ("<style>*{-webkit-print-color-adjust:exact !important;"
                   "print-color-adjust:exact !important;}</style>")
-        if "</head>" in html:
+        # A <base> so any resource we DIDN'T inline (e.g. the calendar's
+        # FontAwesome <link> stylesheet + its font) still resolves — Chromium
+        # fetches those public /web/static assets over HTTP from the live site.
+        # Images and the masthead font are already inlined as data: URIs, so no
+        # authenticated URLs are fetched this way.
+        if base_url:
+            inject = '<base href="%s/">' % base_url.rstrip("/") + inject
+        if "<head>" in html:
+            html = html.replace("<head>", "<head>" + inject, 1)
+        elif "</head>" in html:
             html = html.replace("</head>", inject + "</head>", 1)
         else:
             html = inject + html
@@ -300,18 +309,20 @@ class IrActionsReport(models.Model):
     # footer renders microscopic.
     def _bulletin_chromium_footer(self, doc):
         from markupsafe import escape as _esc
-        lodge = _esc((getattr(doc, "lodge_name", "") or "")) if doc else ""
+        lodge = str(_esc(getattr(doc, "lodge_name", "") or "")) if doc else ""
         month = ""
         if doc and getattr(doc, "issue_date", False):
-            month = _esc(doc.issue_date.strftime("%B %Y"))
+            month = str(_esc(doc.issue_date.strftime("%B %Y")))
+        # NB: plain concatenation, not %-formatting — the CSS contains literal
+        # '%' (width:100%) that would be misread as format specifiers.
         return (
             '<div style="width:100%;font:8.5pt Arial,sans-serif;color:#3f2566;'
             'padding:0 0.42in;box-sizing:border-box;">'
-            '<span style="float:left;">%s · B.P.O.E.</span>'
-            '<span style="float:right;">%s</span>'
+            '<span style="float:left;">' + lodge + ' · B.P.O.E.</span>'
+            '<span style="float:right;">' + month + '</span>'
             '<span style="display:block;text-align:center;font-weight:bold;">'
             'Page <span class="pageNumber"></span> of '
-            '<span class="totalPages"></span></span></div>' % (lodge, month))
+            '<span class="totalPages"></span></span></div>')
 
     # === AI AGENT ===
     # CLI fallback: find a chromium/chrome binary and print via
