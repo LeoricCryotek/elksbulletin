@@ -37,6 +37,7 @@ import mimetypes
 import re
 import urllib.request
 from collections import defaultdict
+from contextlib import contextmanager
 
 from lxml import etree, html as lxml_html
 
@@ -277,11 +278,7 @@ class IrActionsReport(models.Model):
         footer = self._bulletin_chromium_footer(doc)
         # Reuse a system-installed chromium/chrome so the server only needs the
         # small `playwright` Python package — NOT Playwright's ~300MB bundled
-        # browser download (which also needs `playwright install`). Prefer an
-        # explicit elksbulletin.chromium_path, else AUTO-DETECT a binary on PATH.
-        # Without this, Playwright looks for its own un-downloaded browser and
-        # fails ("Executable doesn't exist ..."). On Debian the binary is
-        # /usr/bin/chromium (apt package `chromium`, not `chromium-browser`).
+        # browser download (which also needs `playwright install`).
         # Browser selection. DEFAULT is Playwright's OWN bundled browser build
         # (install it with `playwright install chromium`), because Playwright
         # pins its driver to a specific browser revision — pointing it at a
@@ -295,22 +292,70 @@ class IrActionsReport(models.Model):
         launch_kwargs = {"args": ["--no-sandbox"]}
         if exe:
             launch_kwargs["executable_path"] = exe
-        with sync_playwright() as p:
-            browser = p.chromium.launch(**launch_kwargs)
-            try:
-                page = browser.new_page()
-                page.set_content(html, wait_until="load")
-                page.emulate_media(media="print")
-                pdf = page.pdf(
-                    prefer_css_page_size=True,   # honour the report's @page size
-                    print_background=True,
-                    display_header_footer=True,
-                    header_template="<span></span>",
-                    footer_template=footer,
-                )
-            finally:
-                browser.close()
+        # CRITICAL on a real Odoo server: the worker lowers its own virtual
+        # address-space limit (RLIMIT_AS, from --limit-memory-hard) and every
+        # child it spawns inherits it. Chromium's V8 reserves a huge virtual
+        # address space at startup; under that ~2.5GB cap the reservation fails
+        # and Chromium aborts on launch with SIGTRAP ("Target ... has been
+        # closed") — even though the same binary runs fine from a plain shell.
+        # Odoo only lowers the SOFT limit and leaves the HARD limit unlimited,
+        # so we raise the soft limit back to the hard limit for the duration of
+        # the render (allowed without root) and restore it in finally. Chromium
+        # and Playwright's driver are spawned while it's raised, so they inherit
+        # the headroom.
+        with self._bulletin_unbounded_address_space():
+            with sync_playwright() as p:
+                browser = p.chromium.launch(**launch_kwargs)
+                try:
+                    page = browser.new_page()
+                    page.set_content(html, wait_until="load")
+                    page.emulate_media(media="print")
+                    pdf = page.pdf(
+                        prefer_css_page_size=True,  # honour report @page size
+                        print_background=True,
+                        display_header_footer=True,
+                        header_template="<span></span>",
+                        footer_template=footer,
+                    )
+                finally:
+                    browser.close()
         return pdf
+
+    # === AI AGENT ===
+    # Context manager: temporarily raise this process's RLIMIT_AS soft limit to
+    # the (unlimited) hard limit so a spawned Chromium can reserve its virtual
+    # address space, then restore. No-op if RLIMIT_AS is already unlimited or
+    # the platform lacks `resource` (non-POSIX). Non-root safe: raising the soft
+    # limit up to the existing hard limit needs no privilege.
+    @contextmanager
+    def _bulletin_unbounded_address_space(self):
+        try:
+            import resource
+        except Exception:
+            yield
+            return
+        try:
+            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        except Exception:
+            yield
+            return
+        changed = False
+        if soft != resource.RLIM_INFINITY:
+            try:
+                resource.setrlimit(resource.RLIMIT_AS, (hard, hard))
+                changed = True
+            except Exception:
+                _logger.warning(
+                    "elksbulletin: could not raise RLIMIT_AS for Chromium; "
+                    "the browser may abort under the worker memory limit.")
+        try:
+            yield
+        finally:
+            if changed:
+                try:
+                    resource.setrlimit(resource.RLIMIT_AS, (soft, hard))
+                except Exception:
+                    pass
 
     # === AI AGENT ===
     # Chromium print footer that reproduces the WeasyPrint @bottom-* boxes:

@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.4",
+    "version": "19.0.1.29.5",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,14 @@ Features
 
 Version history
 ---------------
+19.0.1.29.5 — Fix Chromium aborting on launch (SIGTRAP / "Target ... has been
+closed") when run from inside an Odoo worker, even though the same browser runs
+fine from a shell. Cause: the worker lowers its own RLIMIT_AS (virtual address
+space, from --limit-memory-hard) and Chromium — whose V8 reserves a huge
+virtual address space — inherits it and can't start. Fix: a context manager
+raises the soft RLIMIT_AS to the (unlimited) hard limit only while Chromium
+launches and renders, then restores it. Non-root safe; no-op when unlimited.
+
 19.0.1.29.4 — Default to Playwright's OWN bundled Chromium build instead of
 auto-detecting a system binary. A system chromium much newer than Playwright's
 pinned revision (e.g. Debian 151 vs Playwright 1.62) dies on launch with
