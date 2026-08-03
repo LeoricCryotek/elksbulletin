@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.5",
+    "version": "19.0.1.29.6",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,12 @@ Features
 
 Version history
 ---------------
+19.0.1.29.6 — Fix the DOUBLE page-number footer under the Chromium engine.
+Chromium 151 renders CSS @page margin boxes (@bottom-left/center/right), so the
+report's WeasyPrint footer AND the injected Playwright footer_template both
+printed, overlapping. The Chromium path now strips the @bottom-* boxes from the
+HTML and lets the template own the footer.
+
 19.0.1.29.5 — Fix Chromium aborting on launch (SIGTRAP / "Target ... has been
 closed") when run from inside an Odoo worker, even though the same browser runs
 fine from a shell. Cause: the worker lowers its own RLIMIT_AS (virtual address

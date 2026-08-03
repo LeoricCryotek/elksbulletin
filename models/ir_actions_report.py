@@ -195,6 +195,12 @@ class IrActionsReport(models.Model):
         base_url = icp.get_param("web.base.url") or ""
         fetcher = self._bulletin_url_fetcher(base_url)
         html = self._bulletin_inline_resources(html, base_url, fetcher)
+        # Strip the CSS @page footer margin-boxes (@bottom-left/center/right).
+        # Those are the WeasyPrint page-number footer — but Chromium 151 ALSO
+        # renders @page margin boxes, so together with the footer_template we
+        # inject via Playwright they print the footer TWICE, overlapping. On the
+        # Chromium path the template owns the footer, so remove the CSS boxes.
+        html = re.sub(r"@bottom-(?:left|center|right)\s*\{[^{}]*\}", "", html)
         # Make Chromium honour our background colours/gradients (the masthead
         # bar, leaderboard shading) even on the CLI path where there's no
         # print_background flag: print-color-adjust:exact forces them to print.
