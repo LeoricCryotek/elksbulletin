@@ -129,6 +129,14 @@ body:has(.o_elksbulletin) {
     background-repeat: no-repeat;
 }
 
+// Masthead banner tables (top date|website|Volume bar, and the logo|title|photo
+// row) are full-width by design. Re-assert width:100% so the top bar always
+// spans the banner in the editor even if the mass_mailing sanitizer stripped the
+// inline table width when the body was rewritten (e.g. on an issue-date change).
+.o_elksbulletin .s_elks_masthead table {
+    width: 100% !important;
+}
+
 // Let our containers fill the page width (matches the print stylesheet), instead
 // of Bootstrap's narrower responsive container max-widths.
 .o_elksbulletin .container,

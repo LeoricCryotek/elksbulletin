@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.16.0",
+    "version": "19.0.1.19.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.16.0
+Elks Bulletin — v19.0.1.19.0
 ============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -66,6 +66,29 @@ Features
 
 Version history
 ---------------
+19.0.1.19.0 — Leaderboard "This Month" board can now cover a custom date range,
+not just a single month. New Style-panel "Range start" / "Range end" (YYYY-MM-DD)
+fields on the Leaderboard block: set both and the left board ranks over that
+window (heading becomes "Selected Range"); leave them blank to keep the monthly
+behavior (still adjustable via Month shown / Exact month). The lodge-year board
+is unaffected. Backed by a range mode added to elks.charity.leaderboard
+(get_leaderboard start/end + range_label) — requires elkscharity 19.0.7.14+.
+
+19.0.1.18.0 — New Members block: better selection by initiation date. "New
+Members Source" now offers relative windows that track the Issue Date — Issue
+month, Previous month, Two months back — plus a Custom date range (From/To date
+fields), alongside the existing Fiscal-Year-to-Date and named-month choices. The
+default is now Previous month. All windows filter on the member's initiation date
+(x_date_initiated).
+
+19.0.1.17.0 — Fix: masthead top bar (date | website | Volume/No.) could collapse
+to the left instead of spanning the banner, after the body was rewritten on an
+issue-date change (the mass_mailing sanitizer can strip a table's inline
+width:100%). The masthead's tables are now re-asserted to full width via CSS in
+both the editor canvas and the report, so the top bar always fills the banner.
+The date-change masthead sync no longer rewrites the widget-owned body_html
+(body_arch only), reducing sanitizer churn.
+
 19.0.1.16.0 — The editor masthead now tracks the Issue Date. Changing the date
 rewrites the date-driven masthead markers (month + "Volume X, No. Y", plus
 city/state and lodge number) right in the editing canvas, so it stops showing the

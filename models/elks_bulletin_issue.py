@@ -48,10 +48,16 @@ _EMOJI_STYLE = ("font-family:'Elks Emoji','Noto Emoji','Symbola',sans-serif;"
 # Month selection for the "New Members" block source window.
 NEW_MEMBER_MONTHS = [
     ("fy", "Fiscal Year to Date"),
-    ("01", "January"), ("02", "February"), ("03", "March"),
-    ("04", "April"), ("05", "May"), ("06", "June"),
-    ("07", "July"), ("08", "August"), ("09", "September"),
-    ("10", "October"), ("11", "November"), ("12", "December"),
+    ("issue", "Issue month"),
+    ("prev", "Previous month"),
+    ("prev2", "Two months back"),
+    ("range", "Custom date range"),
+    ("01", "January (this issue's year)"), ("02", "February (this issue's year)"),
+    ("03", "March (this issue's year)"), ("04", "April (this issue's year)"),
+    ("05", "May (this issue's year)"), ("06", "June (this issue's year)"),
+    ("07", "July (this issue's year)"), ("08", "August (this issue's year)"),
+    ("09", "September (this issue's year)"), ("10", "October (this issue's year)"),
+    ("11", "November (this issue's year)"), ("12", "December (this issue's year)"),
 ]
 
 # Display order for the Lodge Officers roster (elks.officer.term positions).
@@ -105,9 +111,22 @@ class ElksBulletinIssue(models.Model):
     # block) so no editor-side option JS is needed; one setting per issue.
     new_member_month = fields.Selection(
         NEW_MEMBER_MONTHS, string="New Members Source",
-        default="fy",
-        help="Which initiations the New Members block features: a single "
-             "calendar month (of this issue's year) or all of the fiscal year.")
+        default="prev",
+        help="Which initiations the New Members block features, by initiation "
+             "date on the member's contact record:\n"
+             "• Issue month / Previous month / Two months back — relative to the "
+             "Issue Date, so it tracks each issue automatically.\n"
+             "• Custom date range — set the From/To dates below.\n"
+             "• Fiscal Year to Date — everyone initiated this fiscal year.\n"
+             "• A named month — that calendar month of the issue's year.")
+    new_member_from = fields.Date(
+        "New Members From",
+        help="Start of the initiation-date range. Used when New Members Source "
+             "is 'Custom date range'.")
+    new_member_to = fields.Date(
+        "New Members To",
+        help="End of the initiation-date range (inclusive). Used when New "
+             "Members Source is 'Custom date range'.")
     new_member_photos = fields.Boolean(
         "Show New Member Photos", default=False,
         help="Include member photos in the New Members block, pulled from each "
@@ -283,7 +302,7 @@ class ElksBulletinIssue(models.Model):
     # === AI AGENT ===
     # onchange (form-only): rewrites the date-driven TEXT masthead markers
     # (data-elks-field = issue_month_year / issue_ref / city_state /
-    # lodge_number) inside body_arch + body_html. Never touches images or the
+    # lodge_number) inside body_arch only. Never touches images or the
     # lodge title (data-elks-field="lodge_name" is intentionally editor-owned).
     # The markers are preserved (only their text changes), so Print/Preview still
     # re-resolves everything as before — this is purely an editor convenience.
@@ -297,10 +316,11 @@ class ElksBulletinIssue(models.Model):
             "city_state": self.city_state or "",
             "lodge_number": self.lodge_number or "",
         }
+        # Only the editor canvas (body_arch) — body_html is the widget-owned
+        # inlined copy and is regenerated from body_arch by the editor; rewriting
+        # it here is unnecessary and risks extra sanitizer churn.
         if self.body_arch:
             self.body_arch = self._fill_text_markers(self.body_arch, markers)
-        if self.body_html:
-            self.body_html = self._fill_text_markers(self.body_html, markers)
 
     @staticmethod
     def _fill_text_markers(html, markers):
@@ -1069,14 +1089,34 @@ class ElksBulletinIssue(models.Model):
     # New members for the configured window (a single month of the issue year,
     # or fiscal-year-to-date). Renders a compact name/age/date table, or photo
     # cards when Show New Member Photos is on.
-    def _html_new_members(self):
+    @staticmethod
+    def _month_bounds(ref):
+        _, last = _calmod.monthrange(ref.year, ref.month)
+        return date(ref.year, ref.month, 1), date(ref.year, ref.month, last)
+
+    def _new_member_window(self):
+        """(start, end) initiation-date window for the New Members block, from
+        the New Members Source setting. Relative modes track the Issue Date."""
         d = self.issue_date or fields.Date.context_today(self)
-        if self.new_member_month and self.new_member_month != "fy":
-            y, m = d.year, int(self.new_member_month)
-            _, last = _calmod.monthrange(y, m)
-            start, end = date(y, m, 1), date(y, m, last)
-        else:
-            start, end = self._fiscal_year_range()
+        mode = self.new_member_month or "fy"
+        if mode == "range":
+            # Custom range; if only one end is set, treat it as open-ended.
+            start = self.new_member_from or date(1900, 1, 1)
+            end = self.new_member_to or date(2999, 12, 31)
+            return start, end
+        if mode == "issue":
+            return self._month_bounds(d)
+        if mode == "prev":
+            return self._month_bounds(d - relativedelta(months=1))
+        if mode == "prev2":
+            return self._month_bounds(d - relativedelta(months=2))
+        if mode in ("01", "02", "03", "04", "05", "06",
+                    "07", "08", "09", "10", "11", "12"):
+            return self._month_bounds(date(d.year, int(mode), 1))
+        return self._fiscal_year_range()  # "fy"
+
+    def _html_new_members(self):
+        start, end = self._new_member_window()
         Partner = self.env["res.partner"].sudo()
         members = Partner.search([
             ("x_is_member", "=", True),
@@ -1536,8 +1576,23 @@ class ElksBulletinIssue(models.Model):
         LB = self.env["elks.charity.leaderboard"]
         ref = self._block_ref_date(el, "o_elks_lb_m", "data-elks-lb-month")
         data = LB.get_dual(ref_date=ref, limit=10, name_mode="full")
-        left = self._lb_board_html(
-            "This Month", data["month_label"], data["month"])
+        # Optional custom date range for the LEFT (This Month) board. When both a
+        # start and end are set on the block (Style panel), that board ranks over
+        # the range instead of a single month; its heading becomes "Selected
+        # Range". The lodge-year board is unaffected.
+        dre = r"^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$"
+        frm = (self._collect_from_ancestors(el, "data-elks-lb-from")[1]
+               if el is not None else "")
+        to = (self._collect_from_ancestors(el, "data-elks-lb-to")[1]
+              if el is not None else "")
+        if re.match(dre, frm or "") and re.match(dre, to or ""):
+            month_rows = LB.get_leaderboard(
+                start=frm.strip(), end=to.strip(), limit=10, name_mode="full")
+            month_label = LB.range_label(frm.strip(), to.strip())
+            left = self._lb_board_html("Selected Range", month_label, month_rows)
+        else:
+            left = self._lb_board_html(
+                "This Month", data["month_label"], data["month"])
         right = self._lb_board_html(
             "This Lodge Year", data["year_label"], data["lodge_year"])
         note = self._e(data.get("note") or "")

@@ -70,6 +70,12 @@
                            help="Control the auto-filled New Members block.">
                         <group>
                             <field name="new_member_month"/>
+                            <field name="new_member_from"
+                                   invisible="new_member_month != 'range'"
+                                   required="new_member_month == 'range'"/>
+                            <field name="new_member_to"
+                                   invisible="new_member_month != 'range'"
+                                   required="new_member_month == 'range'"/>
                         </group>
                         <group>
                             <field name="new_member_photos"/>

@@ -83,6 +83,15 @@
             <BuilderTextInput dataAttributeAction="'elksLbMonth'"
                               placeholder.translate="e.g. 2026-08"/>
         </BuilderRow>
+        <BuilderRow label.translate="Range start (YYYY-MM-DD)"
+                    tooltip.translate="Set both Range dates to make the 'This Month' board cover a custom range instead of a single month.">
+            <BuilderTextInput dataAttributeAction="'elksLbFrom'"
+                              placeholder.translate="e.g. 2026-06-01"/>
+        </BuilderRow>
+        <BuilderRow label.translate="Range end (YYYY-MM-DD)">
+            <BuilderTextInput dataAttributeAction="'elksLbTo'"
+                              placeholder.translate="e.g. 2026-08-31"/>
+        </BuilderRow>
         <BuilderRow label.translate="Stack boards (full width)">
             <BuilderCheckbox classAction="'o_elks_lb_stacked'"/>
         </BuilderRow>

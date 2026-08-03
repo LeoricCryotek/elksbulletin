@@ -428,6 +428,12 @@
                             overflow: hidden;
                         }
                         .s_elks_masthead { break-after: avoid; }
+                        /* The masthead banner's top bar (date | website |
+                           Volume/No.) and the logo|title|photo row are full-width
+                           tables. Re-assert width:100% so the top bar always
+                           spans the banner even if an inline width was stripped
+                           (some HTML sanitizers drop table style widths). */
+                        .s_elks_masthead table { width: 100% !important; }
 
                         /* Spacer block: an empty vertical gap. Its inline height
                            prints as-is; the editor-only "Spacer" label is hidden.
