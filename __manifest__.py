@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.8",
+    "version": "19.0.1.29.9",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,12 @@ Features
 
 Version history
 ---------------
+19.0.1.29.9 — Footer: fix the "· B.P.O.E." separator rendering as "·B.P.O.E."
+(dot jammed against the B). The CSS content used a hex escape (\00B7) for the
+middle dot, and CSS consumes the single space right after a hex escape as its
+terminator — swallowing the space before "B.P.O.E.". Replaced it with the
+literal · character so both spaces are preserved.
+
 19.0.1.29.8 — Masthead: add top padding between the purple top bar and the
 logo | "Lewiston Elks Lodge" title | building-photo row, which previously sat
 flush against the top bar. Report-CSS rule (.s_elks_masthead table + table td),

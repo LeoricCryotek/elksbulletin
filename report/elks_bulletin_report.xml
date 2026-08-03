@@ -171,7 +171,7 @@
                                 /* Lodge name straight from FRS lodge settings
                                    (elks.lodge.settings.name, the full "Lodge
                                    Name" which already includes the number). */
-                                content: "<t t-esc="doc.lodge_name or ''"/> \00B7 B.P.O.E.";
+                                content: "<t t-esc="doc.lodge_name or ''"/> · B.P.O.E.";
                                 font: 8.5pt Arial, sans-serif; color: #3f2566;
                             }
                             @bottom-center {
