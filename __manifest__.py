@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.1",
+    "version": "19.0.1.29.2",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,13 @@ Features
 
 Version history
 ---------------
+19.0.1.29.2 — Chromium/Playwright now AUTO-DETECTS a system chrome/chromium
+binary on PATH (chromium, chromium-browser, google-chrome, ...) and uses it as
+Playwright's executable_path. Without this, Playwright looked for its own
+un-downloaded browser and failed ("Executable doesn't exist ..."), silently
+falling back to wkhtmltopdf. elksbulletin.chromium_path still overrides if set,
+but is no longer required when the binary is on PATH.
+
 19.0.1.29.1 — Fixes for the Chromium engine's first live run: (1) the print
 footer and (2) the "Preview (data)" paper CSS both used %-string formatting on
 CSS that contains a literal '%' (width:100%), which raised ValueError /

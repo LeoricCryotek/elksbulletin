@@ -275,14 +275,22 @@ class IrActionsReport(models.Model):
         except Exception:
             return self._bulletin_chromium_pdf_cli(html, legal)
         footer = self._bulletin_chromium_footer(doc)
-        # Reuse a system-installed chromium/chrome if elksbulletin.chromium_path
-        # points at one, so the server only needs the small `playwright` Python
-        # package — NOT Playwright's ~300MB bundled-browser download (which also
-        # needs `playwright install`). On Debian the binary is /usr/bin/chromium
-        # (apt package `chromium`, not `chromium-browser`).
+        # Reuse a system-installed chromium/chrome so the server only needs the
+        # small `playwright` Python package — NOT Playwright's ~300MB bundled
+        # browser download (which also needs `playwright install`). Prefer an
+        # explicit elksbulletin.chromium_path, else AUTO-DETECT a binary on PATH.
+        # Without this, Playwright looks for its own un-downloaded browser and
+        # fails ("Executable doesn't exist ..."). On Debian the binary is
+        # /usr/bin/chromium (apt package `chromium`, not `chromium-browser`).
+        import shutil
+        exe = (self.env["ir.config_parameter"].sudo().get_param(
+                   "elksbulletin.chromium_path")
+               or shutil.which("chromium")
+               or shutil.which("chromium-browser")
+               or shutil.which("google-chrome")
+               or shutil.which("google-chrome-stable")
+               or shutil.which("chrome"))
         launch_kwargs = {"args": ["--no-sandbox"]}
-        exe = self.env["ir.config_parameter"].sudo().get_param(
-            "elksbulletin.chromium_path")
         if exe:
             launch_kwargs["executable_path"] = exe
         with sync_playwright() as p:
