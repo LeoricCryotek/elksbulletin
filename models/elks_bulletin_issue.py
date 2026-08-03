@@ -44,6 +44,14 @@ _EMOJI_RE = re.compile(
 # 'Elks Emoji'); monochrome Noto Emoji renders on every WeasyPrint build.
 _EMOJI_STYLE = ("font-family:'Elks Emoji','Noto Emoji','Symbola',sans-serif;"
                 "font-style:normal;font-weight:normal;")
+# For the headless-Chromium engine: name the platform COLOR emoji fonts so the
+# glyphs print in full colour (Chromium/Blink embeds Noto Color Emoji / Apple
+# Color Emoji into the PDF, unlike WeasyPrint or wkhtmltopdf). No bundled font
+# needed — the OS emoji font is used, which is why Chromium is the engine that
+# keeps the emoji the editor shows.
+_EMOJI_STYLE_COLOR = (
+    "font-family:'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji',"
+    "'Twemoji Mozilla',sans-serif;font-style:normal;font-weight:normal;")
 
 # Month selection for the "New Members" block source window.
 NEW_MEMBER_MONTHS = [
@@ -835,6 +843,19 @@ class ElksBulletinIssue(models.Model):
     # blank/tiny in the PDF; naming our monochrome @font-face makes them print.
     # Walks text and tails only (never attributes); skips <style>/<script>.
     def _wrap_emoji_fonts(self, root):
+        # Emoji handling depends on the PDF engine:
+        #   * weasyprint -> pin emoji to the bundled MONOCHROME 'Elks Emoji'
+        #     @font-face (served only by the WeasyPrint url_fetcher).
+        #   * chromium   -> pin to the platform COLOR emoji font so the glyphs
+        #     print in full colour, exactly as the editor/browser shows them.
+        #   * wkhtmltopdf (or anything else) -> STRIP the emoji: its URL 404s and
+        #     the emoji code points can crash the legacy engine (SIGFPE); they
+        #     were only decorative icons in the calendar/leaderboard.
+        engine = (self.env["ir.config_parameter"].sudo().get_param(
+            "elksbulletin.pdf_engine", "wkhtmltopdf") or "wkhtmltopdf")
+        engine = engine.strip().lower()
+        strip = engine not in ("weasyprint", "chromium")
+        emoji_style = _EMOJI_STYLE_COLOR if engine == "chromium" else _EMOJI_STYLE
         count = 0
         for el in list(root.iter()):
             if not isinstance(el.tag, str) or el.tag in ("style", "script"):
@@ -843,10 +864,17 @@ class ElksBulletinIssue(models.Model):
                 segs = _EMOJI_RE.split(el.text)
                 el.text = segs[0] or None
                 for i in range(1, len(segs), 2):
+                    tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
+                    if strip:
+                        # Drop the emoji; keep the following text on the parent.
+                        if tail:
+                            el.text = (el.text or "") + tail
+                        count += 1
+                        continue
                     span = etree.Element("span")
-                    span.set("style", _EMOJI_STYLE)
+                    span.set("style", emoji_style)
                     span.text = segs[i]
-                    span.tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
+                    span.tail = tail
                     el.insert((i - 1) // 2, span)
                     count += 1
             for child in list(el):
@@ -856,17 +884,21 @@ class ElksBulletinIssue(models.Model):
                 child.tail = segs[0] or None
                 ref = child
                 for i in range(1, len(segs), 2):
+                    tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
+                    if strip:
+                        if tail:
+                            child.tail = (child.tail or "") + tail
+                        count += 1
+                        continue
                     span = etree.Element("span")
-                    span.set("style", _EMOJI_STYLE)
+                    span.set("style", emoji_style)
                     span.text = segs[i]
-                    span.tail = (segs[i + 1] if i + 1 < len(segs) else "") or None
+                    span.tail = tail
                     ref.addnext(span)
                     ref = span
                     count += 1
-        # Proof-of-life so you can confirm from the log that this build is live
-        # AND how many emoji were pinned to the bundled font.
-        _logger.info("elksbulletin: wrapped %d emoji run(s) onto 'Elks Emoji'",
-                     count)
+        _logger.info("elksbulletin: %s %d emoji run(s) (%s)",
+                     "stripped" if strip else "wrapped", count, engine)
 
     # === HUMAN ===
     # Pulls a Page Break up and out of the email-style table wrapping so the
@@ -1176,13 +1208,10 @@ class ElksBulletinIssue(models.Model):
                     f'object-fit:cover;border:2px solid {self._PURPLE_DEEP};"/>'
                 )
             else:
-                initial = (mbr.name or "?").strip()[:1].upper()
-                photo = (
-                    f'<div style="width:88px;height:88px;border-radius:50%;'
-                    f'background:{self._PURPLE};color:#fff;display:inline-block;'
-                    f'line-height:88px;font-family:Georgia,serif;font-size:34px;'
-                    f'font-weight:bold;">{initial}</div>'
-                )
+                # No photo on file: show no placeholder (the monogram circle was
+                # removed per lodge preference — it didn't scale cleanly). The
+                # card is just the name + age/date.
+                photo = ""
             age = int(mbr.x_age) if mbr.x_age else ""
             meta = " · ".join(filter(None, [
                 (f"Age {age}" if age else ""),
@@ -1710,12 +1739,35 @@ class ElksBulletinIssue(models.Model):
                     f'Officer roster for {lodge_year} is not set yet.</p>')
         pos_labels = dict(Term._fields["position"].selection)
         order = {p: i for i, p in enumerate(OFFICER_ORDER)}
-        terms = terms.sorted(key=lambda t: order.get(t.position, 999))
-        cells = [
-            f'<b>{self._e(pos_labels.get(t.position, t.position))}</b> — '
-            f'{self._e(t.partner_id.name)}'
-            for t in terms
-        ]
+        # Collapse to one entry per position so an office shows its CURRENT
+        # state. A position may carry two terms in a year: the original that
+        # was vacated (x_is_vacated) and a later replacement. The current
+        # (non-vacated) holder wins; if every term for the office is vacated
+        # and no one has backfilled it, the seat renders as "Vacant" — this is
+        # how a mid-term resignation shows up live on the roster.
+        _floor = fields.Date.to_date("1900-01-01")
+        chosen = {}
+        for t in terms:
+            cur = chosen.get(t.position)
+            if cur is None:
+                chosen[t.position] = t
+            elif cur.x_is_vacated and not t.x_is_vacated:
+                chosen[t.position] = t
+            elif cur.x_is_vacated == t.x_is_vacated and \
+                    (t.date_start or _floor) >= (cur.date_start or _floor):
+                chosen[t.position] = t
+        ordered = sorted(chosen.values(),
+                         key=lambda t: order.get(t.position, 999))
+        cells = []
+        for t in ordered:
+            if t.x_is_vacated:
+                who = '<i style="color:#999;">Vacant</i>'
+            else:
+                who = self._e(t.partner_id.name)
+            cells.append(
+                f'<b>{self._e(pos_labels.get(t.position, t.position))}</b> — '
+                f'{who}'
+            )
         half = (len(cells) + 1) // 2
         left, right = cells[:half], cells[half:]
         rows = []

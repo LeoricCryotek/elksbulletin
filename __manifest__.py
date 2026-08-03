@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.26.0",
+    "version": "19.0.1.29.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.26.0
+Elks Bulletin — v19.0.1.29.0
 ============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -66,6 +66,48 @@ Features
 
 Version history
 ---------------
+19.0.1.29.0 — New PDF engine option: headless CHROMIUM. Set the system parameter
+elksbulletin.pdf_engine=chromium to render the newsletter with a real browser
+engine (Blink). It's the only engine that gives BOTH reliable pagination on this
+flex/tall-block layout AND full-colour emoji — Chromium prints emoji straight
+from the platform emoji font, so the PDF matches the editor/browser preview with
+no bundled emoji font to install. How it works: the resolved newsletter HTML has
+its images + the Great Vibes masthead font inlined as data: URIs (via the same
+ORM resolver the WeasyPrint path uses), so Chromium renders offline with no auth
+round-trip; emoji are wrapped in a colour-emoji font stack; the @page size and
+margins come from CSS; and the lodge/page-number/date footer (a WeasyPrint-only
+@bottom-* feature) is reproduced with Chromium's print footer_template. Two
+backends, auto-detected: Playwright (recommended — gives the page-number
+footer) or any system chromium/chrome binary via --headless --print-to-pdf (no
+footer). Point elksbulletin.chromium_path at the binary (e.g. /usr/bin/chromium
+on Debian) and BOTH backends reuse it — Playwright then needs only its small
+Python package, not its ~300MB bundled-browser download. If neither is present
+or the render fails, it degrades gracefully to wkhtmltopdf with a logged
+warning. Server needs: the apt `chromium` binary + a colour emoji font
+(fonts-noto-color-emoji), and for the footer, the `playwright` Python package
+installed into Odoo's interpreter. Default engine is still wkhtmltopdf.
+
+19.0.1.28.0 — Print-scaling & live-data fixes on the browser-print output.
+(1) Columns "overcasting" (bleeding over their neighbour) when the sheet is
+scaled to fit 8.5x11 — caused by flex children defaulting to min-width:auto, so
+a tall photo (e.g. a Trustee message photo) or the leaderboard's side-by-side
+table refused to shrink into its column; added min-width:0 so columns honour
+their percentage width. (2) Welcome New Members — removed the monogram circle
+placeholder for members with no photo on file (it didn't scale cleanly); the
+card now shows just the name + age/date. (3) Lodge Officers roster now reflects
+mid-term vacancies live: it collapses each office to its current state, so a
+resigned officer (marked vacated on elks.officer.term) renders as "Vacant" until
+someone backfills the seat, instead of still showing the departed officer.
+
+19.0.1.27.0 — Fix wkhtmltopdf SIGFPE crash (error code -8) on this newsletter.
+Two known legacy-engine crash triggers neutralized: (1) emoji — the bundled
+'Elks Emoji' font is served only by the WeasyPrint url_fetcher, so under
+wkhtmltopdf its URL 404s and the emoji code points crash the engine; emoji are
+now STRIPPED when not rendering with WeasyPrint (they were decorative icons).
+(2) justified text — justify + letter-spacing on short lines divides by zero in
+wkhtmltopdf's line layout; justified text is now forced to left-align in the
+report. Both are no-ops under WeasyPrint.
+
 19.0.1.26.0 — DEFAULT PDF engine switched to wkhtmltopdf (WebKit). WeasyPrint
 reliably halted pagination on this newsletter's flex/tall-block layout and dropped
 everything after the offending block, while a browser (WebKit) paginates the exact

@@ -115,10 +115,30 @@ class IrActionsReport(models.Model):
                     "system parameter elksbulletin.pdf_engine)",
                     report.report_name, weasyprint.__version__)
                 return self._render_bulletin_weasyprint(report_ref, res_ids, data)
-            _logger.info(
-                "elksbulletin: rendering %s with wkhtmltopdf (default engine; "
-                "set elksbulletin.pdf_engine=weasyprint to use WeasyPrint)",
-                report.report_name)
+            if engine == "chromium":
+                # Headless Chromium (Blink) renders the newsletter exactly like a
+                # browser: correct pagination on this flex/tall-block layout AND
+                # full-colour emoji from the platform emoji font — the one engine
+                # that gives us both. If Chromium/Playwright isn't available or
+                # the render fails, we fall through to wkhtmltopdf rather than
+                # error the print (graceful degrade), with a warning naming why.
+                try:
+                    _logger.info(
+                        "elksbulletin: rendering %s with headless Chromium "
+                        "(elksbulletin.pdf_engine=chromium)", report.report_name)
+                    return self._render_bulletin_chromium(
+                        report_ref, res_ids, data)
+                except Exception:
+                    _logger.warning(
+                        "elksbulletin: Chromium render failed; falling back to "
+                        "wkhtmltopdf. Install a chromium/chrome binary (or the "
+                        "Playwright chromium) on the server to use this engine.",
+                        exc_info=True)
+            else:
+                _logger.info(
+                    "elksbulletin: rendering %s with wkhtmltopdf (default engine; "
+                    "set elksbulletin.pdf_engine=weasyprint or =chromium to "
+                    "change)", report.report_name)
         return super()._render_qweb_pdf(report_ref, res_ids=res_ids, data=data)
 
     # === HUMAN ===
@@ -146,6 +166,193 @@ class IrActionsReport(models.Model):
             url_fetcher=fetcher,
         )
         return document.write_pdf(), "pdf"
+
+    # === HUMAN ===
+    # Builds the PDF with headless Chromium (a real browser engine). Chromium
+    # paginates this newsletter the same way the on-screen Preview does, and — the
+    # whole reason to use it — prints the emoji in full colour straight from the
+    # system emoji font, so the printed PDF matches what you see in the editor.
+    # The lodge/page-number/date footer is drawn by Chromium's own print footer.
+    # === AI AGENT ===
+    # Render the newsletter HTML, INLINE every external resource (images, the
+    # Great Vibes masthead font) into data: URIs via the same ORM url_fetcher the
+    # WeasyPrint path uses — so Chromium renders fully offline with no auth round
+    # trip — then convert with Chromium. Two backends, tried in order:
+    #   1. Playwright (page.pdf): honours @page size/margins via
+    #      prefer_css_page_size, prints backgrounds, and draws a footer_template
+    #      that reproduces the WeasyPrint @bottom-* page-number footer.
+    #   2. A system chromium/chrome binary via `--headless --print-to-pdf`
+    #      (no custom footer; --no-pdf-header-footer). Path can be pinned with
+    #      the system parameter elksbulletin.chromium_path.
+    # Any failure raises to the dispatcher, which degrades to wkhtmltopdf.
+    def _render_bulletin_chromium(self, report_ref, res_ids, data):
+        report = self._get_report(report_ref)
+        html, _type = self._render_qweb_html(report_ref, res_ids, data=data)
+        if isinstance(html, bytes):
+            html = html.decode("utf-8")
+        icp = self.env["ir.config_parameter"].sudo()
+        base_url = icp.get_param("web.base.url") or ""
+        fetcher = self._bulletin_url_fetcher(base_url)
+        html = self._bulletin_inline_resources(html, base_url, fetcher)
+        # Make Chromium honour our background colours/gradients (the masthead
+        # bar, leaderboard shading) even on the CLI path where there's no
+        # print_background flag: print-color-adjust:exact forces them to print.
+        inject = ("<style>*{-webkit-print-color-adjust:exact !important;"
+                  "print-color-adjust:exact !important;}</style>")
+        if "</head>" in html:
+            html = html.replace("</head>", inject + "</head>", 1)
+        else:
+            html = inject + html
+        doc = None
+        if res_ids:
+            doc = self.env[report.model].sudo().browse(res_ids[0]).exists()
+        pdf = self._bulletin_chromium_pdf(html, doc)
+        if not pdf:
+            raise RuntimeError("Chromium produced no PDF output")
+        return pdf, "pdf"
+
+    # === AI AGENT ===
+    # Rewrite <img src> and CSS font url()s into self-contained data: URIs using
+    # `fetcher` (the ORM resolver). Leaves anything it can't resolve untouched.
+    # This is what lets Chromium render without hitting the Odoo HTTP stack.
+    def _bulletin_inline_resources(self, html, base_url, fetcher):
+        try:
+            frag = lxml_html.fromstring(html)
+        except Exception:
+            return html
+
+        def to_data_uri(url):
+            if not url or url.startswith("data:"):
+                return None
+            try:
+                res = fetcher(url)
+            except Exception:
+                return None
+            if not res or not res.get("string"):
+                return None
+            raw = res["string"]
+            if isinstance(raw, str):
+                raw = raw.encode("utf-8")
+            mime = res.get("mime_type") or "application/octet-stream"
+            return "data:%s;base64,%s" % (
+                mime, base64.b64encode(raw).decode("ascii"))
+
+        for img in frag.xpath("//img[@src]"):
+            du = to_data_uri(img.get("src"))
+            if du:
+                img.set("src", du)
+
+        url_re = re.compile(
+            r"url\(\s*['\"]?([^'\")]+\.(?:ttf|otf|woff2?|eot))(?:\?[^'\")]*)?"
+            r"['\"]?\s*\)", re.I)
+
+        def repl(m):
+            du = to_data_uri(m.group(1))
+            return "url('%s')" % du if du else m.group(0)
+
+        for style_el in frag.xpath("//style"):
+            css = style_el.text or ""
+            if "url(" in css:
+                style_el.text = url_re.sub(repl, css)
+        return lxml_html.tostring(frag, encoding="unicode")
+
+    # === AI AGENT ===
+    # HTML -> PDF bytes via Chromium. Prefers Playwright (better control + a real
+    # page-number footer); falls back to a system chrome binary on the CLI.
+    def _bulletin_chromium_pdf(self, html, doc):
+        legal = bool(doc) and getattr(doc, "page_size", "") == "legal"
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception:
+            return self._bulletin_chromium_pdf_cli(html, legal)
+        footer = self._bulletin_chromium_footer(doc)
+        # Reuse a system-installed chromium/chrome if elksbulletin.chromium_path
+        # points at one, so the server only needs the small `playwright` Python
+        # package — NOT Playwright's ~300MB bundled-browser download (which also
+        # needs `playwright install`). On Debian the binary is /usr/bin/chromium
+        # (apt package `chromium`, not `chromium-browser`).
+        launch_kwargs = {"args": ["--no-sandbox"]}
+        exe = self.env["ir.config_parameter"].sudo().get_param(
+            "elksbulletin.chromium_path")
+        if exe:
+            launch_kwargs["executable_path"] = exe
+        with sync_playwright() as p:
+            browser = p.chromium.launch(**launch_kwargs)
+            try:
+                page = browser.new_page()
+                page.set_content(html, wait_until="load")
+                page.emulate_media(media="print")
+                pdf = page.pdf(
+                    prefer_css_page_size=True,   # honour the report's @page size
+                    print_background=True,
+                    display_header_footer=True,
+                    header_template="<span></span>",
+                    footer_template=footer,
+                )
+            finally:
+                browser.close()
+        return pdf
+
+    # === AI AGENT ===
+    # Chromium print footer that reproduces the WeasyPrint @bottom-* boxes:
+    # lodge name (left), "Page N of M" (centre), issue month (right). Chromium
+    # substitutes .pageNumber / .totalPages; font-size must be set inline or the
+    # footer renders microscopic.
+    def _bulletin_chromium_footer(self, doc):
+        from markupsafe import escape as _esc
+        lodge = _esc((getattr(doc, "lodge_name", "") or "")) if doc else ""
+        month = ""
+        if doc and getattr(doc, "issue_date", False):
+            month = _esc(doc.issue_date.strftime("%B %Y"))
+        return (
+            '<div style="width:100%;font:8.5pt Arial,sans-serif;color:#3f2566;'
+            'padding:0 0.42in;box-sizing:border-box;">'
+            '<span style="float:left;">%s · B.P.O.E.</span>'
+            '<span style="float:right;">%s</span>'
+            '<span style="display:block;text-align:center;font-weight:bold;">'
+            'Page <span class="pageNumber"></span> of '
+            '<span class="totalPages"></span></span></div>' % (lodge, month))
+
+    # === AI AGENT ===
+    # CLI fallback: find a chromium/chrome binary and print via
+    # --headless --print-to-pdf. No custom footer (Chrome's default is
+    # suppressed with --no-pdf-header-footer). @page size/margins come from CSS.
+    def _bulletin_chromium_pdf_cli(self, html, legal):
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        icp = self.env["ir.config_parameter"].sudo()
+        binary = (icp.get_param("elksbulletin.chromium_path")
+                  or shutil.which("chromium")
+                  or shutil.which("chromium-browser")
+                  or shutil.which("google-chrome")
+                  or shutil.which("google-chrome-stable")
+                  or shutil.which("chrome"))
+        if not binary:
+            raise RuntimeError(
+                "no chromium/chrome binary found (set elksbulletin.chromium_path "
+                "or install chromium)")
+        with tempfile.TemporaryDirectory() as d:
+            hp = os.path.join(d, "bulletin.html")
+            op = os.path.join(d, "bulletin.pdf")
+            with open(hp, "w", encoding="utf-8") as fh:
+                fh.write(html)
+            cmd = [
+                binary, "--headless=new", "--no-sandbox", "--disable-gpu",
+                "--no-pdf-header-footer",
+                "--run-all-compositor-stages-before-draw",
+                "--virtual-time-budget=10000",
+                "--print-to-pdf=" + op, "file://" + hp,
+            ]
+            proc = subprocess.run(
+                cmd, timeout=120, capture_output=True)
+            if not os.path.exists(op):
+                raise RuntimeError(
+                    "chromium --print-to-pdf produced no file (%s)"
+                    % (proc.stderr[-400:].decode("utf-8", "replace")))
+            with open(op, "rb") as fh:
+                return fh.read()
 
     # === HUMAN ===
     # If a story (Message Block / Two-Thirds+One-Third / Three Columns body

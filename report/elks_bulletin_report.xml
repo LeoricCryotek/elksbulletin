@@ -201,6 +201,12 @@
                            it always fits on a page and the rest paginates. 9in
                            is under the Letter printable height (10in). */
                         img { max-width: 100%; max-height: 9in; height: auto; }
+                        /* wkhtmltopdf SIGFPE guard: justified text (especially
+                           combined with letter-spacing) crashes the legacy engine
+                           on short lines — it divides by (words-1)=0 while
+                           spreading a line. Force justified text to left-align.
+                           Harmless under WeasyPrint. */
+                        [style*="justify"] { text-align: left !important; }
                         .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
 
                         /* -------- Compact "Grand Lodge" print density --------
@@ -345,7 +351,16 @@
                            wins on the wide print page (mirrors Bootstrap's
                            min-width media cascade without evaluating queries). */
                         .row { display: flex; flex-wrap: wrap; align-items: flex-start; }
-                        .row:not(.o_grid_mode) > [class*="col-"] { box-sizing: border-box; padding: 0 8px; flex: 0 0 auto; }
+                        /* min-width:0 is essential: a flex child defaults to
+                           min-width:auto, i.e. it refuses to shrink below its
+                           content's intrinsic width. A tall photo or the
+                           leaderboard's side-by-side table then overflows its
+                           50%/33% column and "overcasts" the neighbouring
+                           column — most visibly once the browser scales the
+                           sheet to fit 8.5x11. min-width:0 lets the column
+                           honour its percentage width and clip its content to
+                           it (paired with img/table max-width:100%). */
+                        .row:not(.o_grid_mode) > [class*="col-"] { box-sizing: border-box; padding: 0 8px; flex: 0 0 auto; min-width: 0; }
                         .col { flex: 1 0 0%; }
                         /* Widths in BREAKPOINT order (base -> xxl) so on a
                            multi-class column (e.g. "col-md-4 col-12") the widest
