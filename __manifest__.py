@@ -24,11 +24,11 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.25.0",
+    "version": "19.0.1.26.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.25.0
+Elks Bulletin — v19.0.1.26.0
 ============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -66,6 +66,17 @@ Features
 
 Version history
 ---------------
+19.0.1.26.0 — DEFAULT PDF engine switched to wkhtmltopdf (WebKit). WeasyPrint
+reliably halted pagination on this newsletter's flex/tall-block layout and dropped
+everything after the offending block, while a browser (WebKit) paginates the exact
+same HTML correctly (proven: a browser print of the preview = 11 full pages).
+wkhtmltopdf is already installed on the server and renders like a browser, so all
+content prints. It also skips the WeasyPrint-only continuation/pin two-pass. Opt
+back into WeasyPrint any time with system parameter elksbulletin.pdf_engine =
+weasyprint. Trade-off under wkhtmltopdf: CSS gradients, CSS grid, the @page
+page-number footer and the bundled monochrome emoji font may render less
+faithfully than WeasyPrint — content completeness was prioritized over polish.
+
 19.0.1.25.0 — Real fixes for "PDF stops paginating." Root cause: an unbreakable
 box taller than the printable page halts WeasyPrint, dropping everything after
 it. Two independent triggers, both addressed: (1) the continuation/pin two-pass

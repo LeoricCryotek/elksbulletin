@@ -96,36 +96,29 @@ class IrActionsReport(models.Model):
     def _render_qweb_pdf(self, report_ref, res_ids=None, data=None):
         report = self._get_report(report_ref)
         if report.report_name in BULLETIN_REPORTS:
-            # Engine toggle for diagnosis. Set the system parameter
-            # `elksbulletin.pdf_engine` = "wkhtmltopdf" (Settings > Technical >
-            # System Parameters) to force the legacy engine and compare output;
-            # unset it or set "weasyprint" for the default. Either way the INFO
-            # line below records which engine actually ran, so you can confirm
-            # whether WeasyPrint is really active (rounded corners / gradients /
-            # page-number footer only work under WeasyPrint).
+            # Engine selection. DEFAULT is now wkhtmltopdf (WebKit): it renders
+            # the newsletter the way a browser does — which paginates this
+            # layout correctly, whereas WeasyPrint could halt on tall/flex blocks
+            # and drop everything after them. Set the system parameter
+            # `elksbulletin.pdf_engine` = "weasyprint" to opt back into the
+            # WeasyPrint pipeline (nicer CSS: gradients, CSS grid, @page
+            # page-number footer, bundled monochrome emoji — but the pagination
+            # fragility). The INFO line records which engine actually ran.
             engine = (self.env["ir.config_parameter"].sudo().get_param(
-                "elksbulletin.pdf_engine", "weasyprint") or "weasyprint")
+                "elksbulletin.pdf_engine", "wkhtmltopdf") or "wkhtmltopdf")
             engine = engine.strip().lower()
-            if weasyprint and engine != "wkhtmltopdf":
-                # Do NOT silently swallow WeasyPrint errors into a wkhtmltopdf
-                # fallback: that masks layout problems (page breaks / block
-                # sizing don't work under wkhtmltopdf). Let errors surface so
-                # they can be fixed. Only fall back when WeasyPrint is absent.
+            if weasyprint and engine == "weasyprint":
+                # Errors surface (no silent fallback) so layout problems can be
+                # fixed rather than masked.
                 _logger.info(
-                    "elksbulletin: rendering %s with WeasyPrint %s",
+                    "elksbulletin: rendering %s with WeasyPrint %s (forced by "
+                    "system parameter elksbulletin.pdf_engine)",
                     report.report_name, weasyprint.__version__)
                 return self._render_bulletin_weasyprint(report_ref, res_ids, data)
-            if engine == "wkhtmltopdf":
-                _logger.info(
-                    "elksbulletin: rendering %s with wkhtmltopdf (forced by "
-                    "system parameter elksbulletin.pdf_engine)",
-                    report.report_name)
-            else:
-                _logger.warning(
-                    "elksbulletin: WeasyPrint is not installed/loadable; "
-                    "printing via wkhtmltopdf. Page breaks, per-block sizing, "
-                    "rounded corners, gradients and the page-number footer all "
-                    "require WeasyPrint (pip install weasyprint + Pango/Cairo).")
+            _logger.info(
+                "elksbulletin: rendering %s with wkhtmltopdf (default engine; "
+                "set elksbulletin.pdf_engine=weasyprint to use WeasyPrint)",
+                report.report_name)
         return super()._render_qweb_pdf(report_ref, res_ids=res_ids, data=data)
 
     # === HUMAN ===
