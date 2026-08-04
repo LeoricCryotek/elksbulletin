@@ -24,7 +24,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.29.9",
+    "version": "19.0.1.30.0",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -66,6 +66,14 @@ Features
 
 Version history
 ---------------
+19.0.1.30.0 — In Memoriam: add an "Additional In Memoriam" picker on the
+newsletter (Dynamic Block Settings). The block still auto-fills with members
+who passed in the month before the issue, and now you can ALSO hand-pick extra
+deceased members to include — the block shows the UNION of both, deduped and
+re-sorted by date of death. The picker is limited to contacts flagged deceased
+(x_drop_reason='deceased') and reads archived contacts (active_test=False) so
+processed deaths still appear.
+
 19.0.1.29.9 — Footer: fix the "· B.P.O.E." separator rendering as "·B.P.O.E."
 (dot jammed against the B). The CSS content used a CSS hex escape (U+00B7) for
 the middle dot, and CSS consumes the single space right after a hex escape as

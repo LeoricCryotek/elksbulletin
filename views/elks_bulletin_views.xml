@@ -80,6 +80,13 @@
                         <group>
                             <field name="new_member_photos"/>
                         </group>
+                        <group string="In Memoriam" colspan="2"
+                               help="The In Memoriam block auto-fills with members who passed in the month before the issue. Add anyone extra here (e.g. a late-reported death); the two lists are combined.">
+                            <field name="in_memoriam_extra_partner_ids"
+                                   widget="many2many_tags"
+                                   options="{'no_create': True}"
+                                   placeholder="Add deceased members to include..."/>
+                        </group>
                     </group>
                     <separator string="Newsletter"/>
                     <field name="mailing_model_id" invisible="1"/>

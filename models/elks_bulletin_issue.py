@@ -145,6 +145,23 @@ class ElksBulletinIssue(models.Model):
              "Grid' block in the editor: drop it under New Members, then "
              "double-click each placeholder and upload the emailed photo. That "
              "grid is hand-edited content and is never overwritten at print.")
+    # In Memoriam: the block auto-fills with members who passed in the month
+    # before the issue (see _html_in_memoriam). This lets the editor ADD extra
+    # deceased members on top of that — e.g. a death reported late, or someone
+    # from an earlier month you want to honor again. The list shown is the UNION
+    # of the auto month-window members and these picks (deduped). Only contacts
+    # flagged deceased (x_drop_reason='deceased') can be chosen; because those
+    # contacts are archived when the death is processed, the field reads with
+    # active_test=False so they still appear in the picker.
+    in_memoriam_extra_partner_ids = fields.Many2many(
+        "res.partner", "elks_bulletin_in_memoriam_rel",
+        "issue_id", "partner_id", string="Additional In Memoriam",
+        domain=[("x_drop_reason", "=", "deceased")],
+        context={"active_test": False},
+        help="Deceased members to include in the In Memoriam block IN ADDITION "
+             "to the ones auto-filled by date (the month before the issue). "
+             "Use this to add a late-reported death, or to feature someone from "
+             "another month. Leave empty to show only the automatic list.")
 
     # --- lodge settings (from elksfrs) -----------------------------------
     lodge_settings_id = fields.Many2one(
@@ -1067,6 +1084,17 @@ class ElksBulletinIssue(models.Model):
                 ("x_date_of_death", ">=", prev_month_start),
                 ("x_date_of_death", "<=", prev_month_end),
             ], order="x_date_of_death asc, name asc")
+        # Union in any manually-added deceased members (Additional In Memoriam
+        # on the issue) that the month-window search didn't already catch, then
+        # re-sort the combined set by date of death (undated last) and name so
+        # the extras slot into the right chronological place. Deduped via the
+        # recordset union so an extra already in the auto list isn't repeated.
+        extras = self.in_memoriam_extra_partner_ids.sudo().filtered(
+            lambda p: p.x_drop_reason == "deceased")
+        members = members | extras
+        _floor = fields.Date.to_date("9999-12-31")
+        members = members.sorted(
+            key=lambda m: (m.x_date_of_death or _floor, m.name or ""))
         if not members:
             return ('<p style="font-family:Arial,sans-serif;font-size:11px;'
                     'color:#555555;font-style:italic;margin:6px 0 0;">'
