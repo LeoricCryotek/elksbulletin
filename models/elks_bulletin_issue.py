@@ -145,23 +145,38 @@ class ElksBulletinIssue(models.Model):
              "Grid' block in the editor: drop it under New Members, then "
              "double-click each placeholder and upload the emailed photo. That "
              "grid is hand-edited content and is never overwritten at print.")
-    # In Memoriam: the block auto-fills with members who passed in the month
-    # before the issue (see _html_in_memoriam). This lets the editor ADD extra
-    # deceased members on top of that — e.g. a death reported late, or someone
-    # from an earlier month you want to honor again. The list shown is the UNION
-    # of the auto month-window members and these picks (deduped). Only contacts
-    # flagged deceased (x_drop_reason='deceased') can be chosen; because those
-    # contacts are archived when the death is processed, the field reads with
-    # active_test=False so they still appear in the picker.
+    # --- Curated member lists (New Members + In Memoriam) -----------------
+    # Both blocks auto-fill by date by default. The "…" header button opens a
+    # dialog PRE-SEEDED with whoever the automatic fill would show, where the
+    # editor can deselect some or add others. Applying the dialog sets the
+    # matching <block>_manual flag and stores the curated selection; from then
+    # on the block shows exactly that list. "Reset to Automatic" clears the flag
+    # and the list, returning to the pure date-based fill. The flag (not just a
+    # non-empty list) is the source of truth, so a deliberately EMPTY curated
+    # list means "show none" rather than silently reverting to automatic.
+    new_member_manual = fields.Boolean(
+        "New Members Curated", default=False, copy=False,
+        help="When set, the New Members block shows the hand-picked list in "
+             "new_member_partner_ids instead of the automatic date fill. "
+             "Managed by the 'New Members…' dialog.")
+    new_member_partner_ids = fields.Many2many(
+        "res.partner", "elks_bulletin_new_member_rel",
+        "issue_id", "partner_id", string="New Members (curated)", copy=False,
+        domain=[("x_is_member", "=", True)],
+        help="The curated New Members list (used when New Members Curated is on).")
+    in_memoriam_manual = fields.Boolean(
+        "In Memoriam Curated", default=False, copy=False,
+        help="When set, the In Memoriam block shows the hand-picked list in "
+             "in_memoriam_extra_partner_ids instead of the automatic date fill. "
+             "Managed by the 'In Memoriam…' dialog.")
     in_memoriam_extra_partner_ids = fields.Many2many(
         "res.partner", "elks_bulletin_in_memoriam_rel",
-        "issue_id", "partner_id", string="Additional In Memoriam",
+        "issue_id", "partner_id", string="In Memoriam (curated)", copy=False,
         domain=[("x_drop_reason", "=", "deceased")],
         context={"active_test": False},
-        help="Deceased members to include in the In Memoriam block IN ADDITION "
-             "to the ones auto-filled by date (the month before the issue). "
-             "Use this to add a late-reported death, or to feature someone from "
-             "another month. Leave empty to show only the automatic list.")
+        help="The curated In Memoriam list (used when In Memoriam Curated is "
+             "on). Only contacts flagged deceased can be chosen; archived "
+             "(processed) deaths are included via active_test=False.")
 
     # --- lodge settings (from elksfrs) -----------------------------------
     lodge_settings_id = fields.Many2one(
@@ -404,6 +419,46 @@ class ElksBulletinIssue(models.Model):
 
     def action_reset_draft(self):
         self.write({"state": "draft"})
+
+    # === HUMAN ===
+    # "New Members…" / "In Memoriam…" header buttons. Each opens a pick-members
+    # dialog PRE-LOADED with whoever the automatic date fill currently shows, so
+    # from the editor you can deselect some or add others. Applying makes the
+    # block use that curated list; "Reset to Automatic" goes back to the pure
+    # date fill. Reachable from the full-screen editor where the plain form
+    # fields aren't.
+    # === AI AGENT ===
+    # Seed each wizard from the block's EFFECTIVE list (curated if already
+    # manual, else the auto fill) and open it as a dialog (target=new).
+    def action_select_new_members(self):
+        self.ensure_one()
+        wiz = self.env["elks.bulletin.new.member.wizard"].create({
+            "issue_id": self.id,
+            "partner_ids": [(6, 0, self._effective_new_members().ids)],
+        })
+        return {
+            "type": "ir.actions.act_window",
+            "name": "New Members — Choose Who Appears",
+            "res_model": "elks.bulletin.new.member.wizard",
+            "res_id": wiz.id,
+            "view_mode": "form",
+            "target": "new",
+        }
+
+    def action_select_in_memoriam(self):
+        self.ensure_one()
+        wiz = self.env["elks.bulletin.in.memoriam.wizard"].create({
+            "issue_id": self.id,
+            "partner_ids": [(6, 0, self._effective_in_memoriam_members().ids)],
+        })
+        return {
+            "type": "ir.actions.act_window",
+            "name": "In Memoriam — Choose Who Appears",
+            "res_model": "elks.bulletin.in.memoriam.wizard",
+            "res_id": wiz.id,
+            "view_mode": "form",
+            "target": "new",
+        }
 
     # === HUMAN ===
     # The "Print / Download PDF" button. Produces a page-sized PDF that matches
@@ -1074,27 +1129,33 @@ class ElksBulletinIssue(models.Model):
     # counting after death). Life status: x_is_honorary_life_member ->
     # "Honorary Life Member", else x_is_life_member -> "Life Member". The gold
     # frame, header and fraternal quote are static in the snippet.
-    def _html_in_memoriam(self):
+    def _auto_in_memoriam_members(self):
+        """Deceased members the automatic fill would show: those whose date of
+        death falls in the calendar month before the issue."""
         issue_d = self.issue_date or fields.Date.context_today(self)
         prev_month_end = issue_d.replace(day=1) - timedelta(days=1)
         prev_month_start = prev_month_end.replace(day=1)
-        members = self.env["res.partner"].sudo().with_context(
+        return self.env["res.partner"].sudo().with_context(
             active_test=False).search([
                 ("x_drop_reason", "=", "deceased"),
                 ("x_date_of_death", ">=", prev_month_start),
                 ("x_date_of_death", "<=", prev_month_end),
             ], order="x_date_of_death asc, name asc")
-        # Union in any manually-added deceased members (Additional In Memoriam
-        # on the issue) that the month-window search didn't already catch, then
-        # re-sort the combined set by date of death (undated last) and name so
-        # the extras slot into the right chronological place. Deduped via the
-        # recordset union so an extra already in the auto list isn't repeated.
-        extras = self.in_memoriam_extra_partner_ids.sudo().filtered(
-            lambda p: p.x_drop_reason == "deceased")
-        members = members | extras
+
+    def _effective_in_memoriam_members(self):
+        """Members the In Memoriam block actually shows: the curated list when
+        taken manual, else the automatic month-window fill. Sorted by date of
+        death (undated last), then name."""
+        if self.in_memoriam_manual:
+            members = self.in_memoriam_extra_partner_ids.sudo()
+        else:
+            members = self._auto_in_memoriam_members()
         _floor = fields.Date.to_date("9999-12-31")
-        members = members.sorted(
+        return members.sorted(
             key=lambda m: (m.x_date_of_death or _floor, m.name or ""))
+
+    def _html_in_memoriam(self):
+        members = self._effective_in_memoriam_members()
         if not members:
             return ('<p style="font-family:Arial,sans-serif;font-size:11px;'
                     'color:#555555;font-style:italic;margin:6px 0 0;">'
@@ -1195,14 +1256,32 @@ class ElksBulletinIssue(models.Model):
             return self._month_bounds(date(d.year, int(mode), 1))
         return self._fiscal_year_range()  # "fy"
 
-    def _html_new_members(self, el=None):
+    def _auto_new_members(self, el=None):
+        """Members the automatic date fill would show, by initiation date."""
         start, end = self._new_member_window(el)
         Partner = self.env["res.partner"].sudo()
-        members = Partner.search([
+        return Partner.search([
             ("x_is_member", "=", True),
             ("x_date_initiated", ">=", start),
             ("x_date_initiated", "<=", end),
         ], order="x_date_initiated asc, name asc")
+
+    def _effective_new_members(self, el=None):
+        """Members the New Members block actually shows.
+
+        Precedence: if the block is curated (new_member_manual), return exactly
+        the curated list and IGNORE `el` — i.e. the per-block "Month shown"
+        option and the issue's "New Members Source" have no effect while
+        curated. Otherwise fall through to the automatic window fill (which
+        itself prefers a per-block option over the issue field)."""
+        if self.new_member_manual:
+            floor = date(2999, 12, 31)
+            return self.new_member_partner_ids.sudo().sorted(
+                key=lambda m: (m.x_date_initiated or floor, m.name or ""))
+        return self._auto_new_members(el)
+
+    def _html_new_members(self, el=None):
+        members = self._effective_new_members(el)
         if not members:
             return ('<p style="font-style:italic;color:#666;">'
                     'No new members were initiated in this period.</p>')

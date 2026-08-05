@@ -1,33 +1,36 @@
 # -*- coding: utf-8 -*-
 # =============================================================================
 # === HUMAN ===
-# Prints the Lodge Newsletter with a modern print engine (WeasyPrint) instead of
-# Odoo's default wkhtmltopdf, so blocks never bleed across page cuts, page
-# sizing / page numbers are exact, and long stories automatically get
-# "Continued on page #" / "(Continued from page #)" bars exactly where they
-# break. Only the newsletter reports use this; every other report in the system
-# prints normally. If WeasyPrint isn't installed on the server, printing falls
-# back to the standard engine (page breaks still work; the auto "Continued"
-# bars and page-number footer don't) and a warning names what's missing.
+# Chooses the print engine for the Lodge Newsletter reports (only ours; every
+# other report in the system prints normally). The engine is set by the system
+# parameter elksbulletin.pdf_engine:
+#   * (default) wkhtmltopdf — Odoo's built-in WebKit engine; paginates this
+#     newsletter's flex/tall-block layout reliably. No page-number footer, no
+#     colour emoji.
+#   * "chromium" — headless Chromium (recommended): true browser pagination,
+#     full-colour emoji, and the CSS @page page-number footer. Needs the
+#     `playwright` package + a chromium browser; degrades to wkhtmltopdf if
+#     absent or on error.
+#   * "weasyprint" — WeasyPrint paged-media (nice CSS + the auto
+#     "Continued on page #" bars), but can halt pagination on tall blocks.
 #
 # === AI AGENT ===
 # Overrides ir.actions.report._render_qweb_pdf. For our two report_names it
-# renders the QWeb to HTML (_render_qweb_html), runs the two-pass
-# auto-continuation marker insertion (_bulletin_insert_continuation_markers),
-# and pipes the result through WeasyPrint, which has real CSS paged-media
-# support (break-inside: avoid, @page size/margins + @bottom margin boxes with
-# counter(page)). A url_fetcher resolves /web/image and /web/content URLs via
-# the ORM so member photos / dragged images render without an authenticated
-# HTTP round-trip, and serves /<module>/static/* assets straight off disk (the
-# calendar's bundled Font Awesome CSS + font); data: URIs (masthead logo,
-# computed photos) need no fetch.
-# WeasyPrint is a SOFT dependency with two distinct behaviors:
-#   * absent/unloadable -> super() (wkhtmltopdf) + a WARNING naming the cause.
-#     The import guard catches Exception, NOT just ImportError: on macOS a
-#     missing native lib raises OSError from cffi's dlopen at import time, and
-#     that once took down the whole registry at server start.
-#   * present but a render error -> the error SURFACES (no silent fallback
-#     that would mask layout bugs).
+# dispatches on elksbulletin.pdf_engine (default "wkhtmltopdf"):
+#   * "weasyprint" (and weasyprint importable) -> _render_bulletin_weasyprint:
+#     renders the QWeb to HTML, runs the OPT-IN two-pass continuation markers,
+#     and pipes through WeasyPrint (real paged-media: break-inside, @page
+#     size/margins + @bottom counter(page) footer).
+#   * "chromium" -> _render_bulletin_chromium (see there); any failure logs a
+#     warning and falls through to wkhtmltopdf.
+#   * anything else -> super() (wkhtmltopdf).
+# The WeasyPrint/Chromium paths share _bulletin_url_fetcher, which resolves
+# /web/image and /web/content URLs via the ORM (member photos / dragged images,
+# no authenticated HTTP round-trip) and serves /<module>/static/* assets off
+# disk (the calendar's Font Awesome); data: URIs need no fetch.
+# WeasyPrint is a SOFT dependency: the import guard catches Exception (NOT just
+# ImportError) because on macOS a missing native lib raises OSError from cffi's
+# dlopen at import time, which once took down the whole registry at start.
 # Model/report changes need -u elksbulletin; this controller-style Python
 # needs a server restart.
 # =============================================================================
@@ -84,16 +87,16 @@ class IrActionsReport(models.Model):
     _inherit = "ir.actions.report"
 
     # === HUMAN ===
-    # The traffic cop: newsletter reports go to WeasyPrint when it's available;
-    # everything else (and the newsletter too, when WeasyPrint is missing) goes
-    # to Odoo's normal print engine, with a log warning naming what to install.
-    # DIAGNOSTIC: to test the legacy engine, set the system parameter
-    # elksbulletin.pdf_engine = "wkhtmltopdf" (unset it to go back). Every
-    # newsletter print logs which engine actually rendered it.
+    # The traffic cop: pick the newsletter's print engine from the system
+    # parameter elksbulletin.pdf_engine — wkhtmltopdf (default), "chromium", or
+    # "weasyprint". Everything except the two newsletter reports prints the
+    # normal way. Every newsletter print logs which engine actually rendered it.
     # === AI AGENT ===
-    # Engine dispatch. Only BULLETIN_REPORTS are affected. WeasyPrint present ->
-    # our renderer, and its errors surface (a silent wkhtmltopdf fallback would
-    # mask layout problems). WeasyPrint absent -> warn + super().
+    # Engine dispatch; only BULLETIN_REPORTS are affected. Reads
+    # elksbulletin.pdf_engine (default "wkhtmltopdf"): "weasyprint" (if
+    # importable) -> _render_bulletin_weasyprint, errors surface; "chromium" ->
+    # _render_bulletin_chromium, errors log + fall through to wkhtmltopdf;
+    # anything else -> super() (wkhtmltopdf).
     def _render_qweb_pdf(self, report_ref, res_ids=None, data=None):
         report = self._get_report(report_ref)
         if report.report_name in BULLETIN_REPORTS:

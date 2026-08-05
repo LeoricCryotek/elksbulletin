@@ -16,19 +16,21 @@
 # that reference it. Assets: two bundles —
 #   * mass_mailing.assets_inside_builder_iframe (SCSS only): paper-sheet
 #     canvas, side rulers, page-boundary lines.
-#   * mass_mailing.assets_builder (JS/XML): Style-panel Width + Officer
-#     options and the PageBreakPreview plugin (canvas page-turn spacers).
+#   * mass_mailing.assets_builder (JS/XML): the per-block Style-panel options
+#     (Width, Officer, Spacer height, Pin-to-bottom, and the Month pickers on
+#     the Leaderboard / Calendar / New Members blocks) and the PageBreakPreview
+#     plugin (canvas page-turn spacers).
 # WeasyPrint is a SOFT runtime dependency (see models/ir_actions_report.py),
 # deliberately NOT in external_dependencies so install never blocks on it.
 # Python/JS changes need a server restart; XML data needs -u elksbulletin.
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.30.0",
+    "version": "19.0.1.31.1",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
-Elks Bulletin — v19.0.1.29.0
+Elks Bulletin — v19.0.1.31.0
 ============================
 A lodge newsletter builder that works like Odoo's email-marketing editor
 (a side panel of drag-in content blocks) but produces a print-ready,
@@ -41,8 +43,12 @@ Features
 * Dynamic blocks that auto-update from lodge data at print time: New Members
   (with optional contact-photo mode), Lodge Calendar (renders the published
   website calendar), Project Dollars, Dues Reminder, Charity Report, Upcoming
-  Events, Events, Lodge Officers, In Memoriam (members who passed in the
-  month before the issue).
+  Events, Events, Lodge Officers, Volunteer Hours Leaderboard, In Memoriam
+  (members who passed in the month before the issue).
+* Curated member lists: the New Members and In Memoriam blocks fill
+  automatically by date, but a "New Members…" / "In Memoriam…" toolbar button
+  opens a dialog pre-filled with that automatic list so you can deselect or add
+  people; "Reset to Automatic" restores the pure date fill.
 * Member Photo Grid: hand-editable photo cards for photos emailed to the
   editor (never overwritten at print).
 * Grand-Lodge-style masthead banner pulling the lodge name, B&W logo,
@@ -61,11 +67,45 @@ Features
   ~11pt body on tight leading) for newspaper-density output.
 * Editing canvas framed as a true paper sheet with side rulers, page-boundary
   guides, and live page-turn preview at forced breaks.
-* PDF via WeasyPrint when installed (page-number footer, real paged-media
-  CSS); graceful wkhtmltopdf fallback otherwise.
+* Selectable PDF engine (system parameter elksbulletin.pdf_engine): the DEFAULT
+  is wkhtmltopdf; set it to "chromium" for headless-Chromium output (true
+  browser pagination + full-colour emoji + the CSS @page page-number footer —
+  the recommended engine, needs the `playwright` Python package + a chromium
+  browser), or "weasyprint" for the WeasyPrint paged-media pipeline.
 
 Version history
 ---------------
+19.0.1.31.1 — Review/cleanup pass. FIX (real bug): two report-CSS comment
+blocks were closed with "-->" instead of "*/", so the CSS parser ran past them
+and swallowed the rules that followed — most importantly .o_mail_snippet_general
+(the core section layout: display:block/width/break-inside/margins) and
+.o_elks_print_flow{font-size:0} (the zero-gap that lets sized inline-blocks sit
+side by side). Both comments now close correctly, restoring those rules. Also:
+refreshed stale comments/docs to match the current engine dispatch (wkhtmltopdf
+default; chromium/weasyprint opt-in) in ir_actions_report.py, the manifest
+Features + header version, and the views header; added docstrings to the picker
+wizards; documented that a curated New Members list overrides the "Month shown"
+/ "New Members Source" settings (in the dialog and the _effective_new_members
+docstring).
+
+19.0.1.31.0 — Curated member lists for BOTH New Members and In Memoriam, while
+keeping the automation. Each block has a "…" header button that opens a dialog
+PRE-FILLED with whoever the automatic date fill currently shows; deselect any or
+add others, then Apply — the block then shows exactly that list. "Reset to
+Automatic" returns to the pure date-based fill. Default stays fully automatic
+until you Apply a change (tracked by new_member_manual / in_memoriam_manual
+flags, so a deliberately empty list means "show none", not "revert to auto").
+Adds a New Members picker + wizard (elks.bulletin.new.member.wizard) alongside
+the In Memoriam one, and reworks In Memoriam from add-only extras to full
+select/deselect. Render now goes through _effective_new_members /
+_effective_in_memoriam_members.
+
+19.0.1.30.1 — In Memoriam: make the member picker reachable from the editor.
+The 30.0 field sat in the form's Dynamic Block Settings group, which is hard to
+get to in the full-screen mailing editor. Added an "In Memoriam…" header button
+(always visible) that opens a dialog to pick the extra deceased members, writing
+back to the same field. (New transient model elks.bulletin.in.memoriam.wizard.)
+
 19.0.1.30.0 — In Memoriam: add an "Additional In Memoriam" picker on the
 newsletter (Dynamic Block Settings). The block still auto-fills with members
 who passed in the month before the issue, and now you can ALSO hand-pick extra

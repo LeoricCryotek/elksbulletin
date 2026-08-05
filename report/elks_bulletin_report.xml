@@ -225,7 +225,7 @@
                            lines at any size — kept IDENTICAL to the editor canvas
                            (newsletter_paper_canvas.scss) so what you type is what
                            prints. Bumping this from the old 1.15 trades a little
-                           density for readability the lodge asked for. -->
+                           density for readability the lodge asked for. */
                         /* Deliberately UNSCOPED (p, not .o_mail_print_wrapper p):
                            the wrapper class only exists when the resolver's
                            flatten step matched; the report document is entirely
@@ -303,7 +303,7 @@
                            break-inside: avoid keeps them whole); only blocks you
                            size in the Style panel become inline-block and sit side
                            by side. font-size:0 on the flow removes the whitespace
-                           gap between adjacent sized inline-blocks. -->
+                           gap between adjacent sized inline-blocks. */
                         .o_elks_print_flow { font-size: 0; }
                         .o_mail_print_wrapper { display: block; width: 100%; }
                         .o_mail_snippet_general {
