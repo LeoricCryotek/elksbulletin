@@ -208,6 +208,13 @@
                            Harmless under WeasyPrint. */
                         [style*="justify"] { text-align: left !important; }
                         .container, .container-fluid { max-width: 100% !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin-left: 0 !important; margin-right: 0 !important; }
+                        /* Officer Message block: the global .container reset
+                           above strips the block's own side padding, so the
+                           message text + byline photo sit flush against the
+                           page margins ("overcast"). Re-inset just this block's
+                           container on both sides (higher specificity + the
+                           !important needed to beat the reset). */
+                        .s_elks_message .container { padding-left: 22px !important; padding-right: 22px !important; }
 
                         /* -------- Compact "Grand Lodge" print density --------
                            Measured from the GL newsletter reference PDF: body is

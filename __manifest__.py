@@ -26,7 +26,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.31.1",
+    "version": "19.0.1.31.3",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -75,6 +75,17 @@ Features
 
 Version history
 ---------------
+19.0.1.31.3 — Events block: fix the "For full event details, visit …" notice
+URL. It appended /event to the full lodge_website (which carries a path, e.g.
+…/newsletter), producing <site>/newsletter/event (a 404). Now it uses only the
+website's DOMAIN, so it correctly points at <domain>/event.
+
+19.0.1.31.2 — Officer Message block: re-inset its content from the page edges.
+The global .container padding reset (which lets full-width bars span edge to
+edge) was also stripping the message block's side padding, so the message text
+and byline photo sat flush against the margins. Added a targeted
+.s_elks_message .container side padding that beats the reset.
+
 19.0.1.31.1 — Review/cleanup pass. FIX (real bug): two report-CSS comment
 blocks were closed with "-->" instead of "*/", so the CSS parser ran past them
 and swallowed the rules that followed — most importantly .o_mail_snippet_general

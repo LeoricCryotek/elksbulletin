@@ -1482,9 +1482,13 @@ class ElksBulletinIssue(models.Model):
                    if teaser else "")
                 + '</div>'
             )
+        # Point at the site's /event page. lodge_website (FRS) may carry a path
+        # (e.g. https://LewistonElks896.com/newsletter), so use only its DOMAIN
+        # — otherwise the notice reads <site>/newsletter/event, which 404s.
         site = (getattr(self, "lodge_website", "") or
-                "https://lewistonelks896.com").rstrip("/")
-        disp = re.sub(r"^https?://", "", site) + "/event"
+                "https://lewistonelks896.com")
+        host = re.sub(r"^https?://", "", site).split("/")[0]
+        disp = host + "/event"
         notice = (
             '<div style="font-family:Arial,sans-serif;font-size:10.5px;'
             'font-style:italic;color:#777;text-align:center;margin-top:2px;">'
