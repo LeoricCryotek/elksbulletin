@@ -1522,8 +1522,18 @@ class ElksBulletinIssue(models.Model):
                 theme = (Theme.search([("is_stock", "=", True)], limit=1)
                          or Theme.search([], limit=1))
                 if theme:
-                    tmp = Pub.new({"month": month, "year": year,
-                                   "theme_id": theme.id})
+                    # CRITICAL: set the Source User Calendar on the throwaway
+                    # publication, same as the saved ones the website renders.
+                    # Without it, the publication's event fetch has no user
+                    # filter and pulls EVERY user's calendar.event — including
+                    # personal events — into the newsletter grid (the website
+                    # is fine because its saved publication has this set).
+                    vals = {"month": month, "year": year, "theme_id": theme.id}
+                    lodge_user = self.env["calendar.event"].sudo(
+                    )._get_lodge_calendar_user()
+                    if lodge_user:
+                        vals["calendar_id"] = lodge_user.id
+                    tmp = Pub.new(vals)
                     body = self.env["ir.qweb"]._render(
                         "elks_calendar_publisher.report_calendar_body",
                         {"pub": tmp})
@@ -1544,17 +1554,31 @@ class ElksBulletinIssue(models.Model):
         return self._html_calendar_simple(d)
 
     # === AI AGENT ===
-    # Fallback month grid from calendar.event, used only if the publisher
-    # render is unavailable.
+    # Fallback month grid, used only if the publisher render is unavailable.
+    # Reads calendar.event but MUST scope to the lodge Source User Calendar
+    # (organizer OR lodge-partner attendee) — the same filter the publisher
+    # uses — so personal events from other users never leak into the newsletter.
+    # If no lodge source user is configured, show nothing rather than every
+    # user's calendar.
     def _html_calendar_simple(self, ref=None):
         d = ref or self.issue_date or fields.Date.context_today(self)
         y, m = d.year, d.month
         _, last = _calmod.monthrange(y, m)
         Event = self.env["calendar.event"].sudo()
-        events = Event.search([
-            ("start", ">=", date(y, m, 1)),
-            ("start", "<=", date(y, m, last)),
-        ], order="start asc")
+        lodge_user = Event._get_lodge_calendar_user()
+        events = Event.browse()  # empty: never leak all users' events
+        if lodge_user:
+            domain = [
+                ("start", ">=", date(y, m, 1)),
+                ("start", "<=", date(y, m, last)),
+            ]
+            lodge_partner = lodge_user.partner_id
+            if lodge_partner:
+                domain += ["|", ("user_id", "=", lodge_user.id),
+                           ("partner_ids", "in", [lodge_partner.id])]
+            else:
+                domain.append(("user_id", "=", lodge_user.id))
+            events = Event.search(domain, order="start asc")
         by_day = {}
         for evt in events:
             sd = evt.start.date() if evt.start else False

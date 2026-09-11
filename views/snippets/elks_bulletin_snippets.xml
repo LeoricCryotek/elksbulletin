@@ -67,6 +67,8 @@
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_mailing.svg"/>
             <t t-snippet="elksbulletin.s_elks_page_break" string="Page Break — Full Width" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
+            <t t-snippet="elksbulletin.s_elks_page_break_inline" string="Page Break — Inline" group="lodge"
+               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
             <t t-snippet="elksbulletin.s_elks_spacer" string="Spacer" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
         </xpath>
@@ -90,8 +92,6 @@
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_calendar.svg"/>
             <t t-snippet="elksbulletin.s_elks_leaderboard" string="Volunteer Leaderboard" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_charity.svg"/>
-            <t t-snippet="elksbulletin.s_elks_page_break_inline" string="Page Break — Inline" group="lodge"
-               t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_pagebreak.svg"/>
             <t t-snippet="elksbulletin.s_elks_upcoming_events" string="Upcoming Events" group="lodge"
                t-thumbnail="/elksbulletin/static/src/img/snippets_thumbs/ico_events.svg"/>
             <t t-snippet="elksbulletin.s_elks_events" string="Events" group="lodge"
@@ -448,22 +448,24 @@
         </section>
     </template>
 
-    <!-- Page Break (Inline): same forced break, but TRUE inner content (bare div
-         + o_snippet_drop_in_only, like the Continued bar above) so it can be
-         dropped INSIDE a story column mid-text (e.g. between two paragraphs of
-         an Officer's Message) instead of only between full-width sections.
-         Invisible in the PDF (report CSS .s_elks_page_break_inline).
-         LIMITATION: only effective inside FULL-WIDTH blocks (Message Block,
-         Two-Thirds + One-Third, Three Columns). Inside a SIZED side-by-side
-         block (o_elks_w_23/_12/_13) it does nothing: those render as
-         inline-block in print, and inline-block boxes are atomic for CSS
-         fragmentation; a break-after inside one cannot split it.
+    <!-- Page Break (Inline): a full-width CONTENT block (a <section>, like the
+         Full Width page break) that forces the next content onto a new printed
+         page and is invisible in the PDF (report CSS .s_elks_page_break_inline
+         zeroes it: height:0, no border/padding, break-after:page). Registered in
+         the structure group so it drops as a normal block between sections.
+         (Was previously an inner-content div — o_snippet_drop_in_only — but the
+         break-after was only ever effective at full width anyway, since sized
+         inline-block columns are atomic for CSS fragmentation; a <section>
+         guarantees that placement.) The dashed "Page Break" line shows only in
+         the editor; print hides it via the class above.
          The auto-continuation pass deliberately skips this element when
          assigning elks-flow ids (issue resolver step 5), so the
          "Continued on page #" bar pairs the paragraphs AROUND the break and
          lands on the correct side of it (bottom of the earlier page). -->
     <template id="s_elks_page_break_inline" name="Page Break (Inline)">
-        <div class="s_elks_page_break_inline o_snippet_drop_in_only" style="border-top:2px dashed #b39ddb;text-align:center;color:#8e7cc3;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding-top:3px;">&#9986; Page Break</div>
+        <section class="s_elks_page_break_inline o_mail_snippet_general pt8 pb8" data-name="Page Break (Inline)">
+            <div style="border-top:2px dashed #b39ddb;text-align:center;color:#8e7cc3;font-family:Arial,sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;padding-top:3px;">&#9986; Page Break</div>
+        </section>
     </template>
 
     <!-- Mailing Panel: lodge return address + non-profit postage box for the

@@ -26,7 +26,7 @@
 # =============================================================================
 {
     "name": "Elks Bulletin — Lodge Newsletter Builder",
-    "version": "19.0.1.31.3",
+    "version": "19.0.1.31.5",
     "category": "Marketing",
     "summary": "Drag-and-drop, print-ready lodge newsletter in Grand Lodge style.",
     "description": """
@@ -75,6 +75,25 @@ Features
 
 Version history
 ---------------
+19.0.1.31.5 — Page Break — Inline is now a full-width CONTENT block (a
+<section> in the structure group) instead of inner-content-only
+(o_snippet_drop_in_only), so it drops as a normal block between sections. The
+forced break was only ever effective at full width anyway (sized inline-block
+columns are atomic for CSS fragmentation), so this matches how it prints; still
+invisible in the PDF. Existing placements keep working (class + print CSS
+unchanged).
+
+19.0.1.31.4 — Lodge Calendar: fix personal events leaking into the newsletter
+grid. When no saved publication exists for the issue month, the block renders a
+throwaway publication — but it was created WITHOUT a Source User Calendar, so
+the publisher's event fetch had no user filter and pulled every user's
+calendar.event (personal events included). The website was unaffected because
+its saved publication has the Source User set. Now the temp publication is
+seeded with the lodge Source User (calendar.event._get_lodge_calendar_user),
+matching the website. Also hardened the last-resort simple grid to scope to the
+same lodge user (organizer or lodge-partner attendee) and to show nothing rather
+than every user's calendar when no lodge user is configured.
+
 19.0.1.31.3 — Events block: fix the "For full event details, visit …" notice
 URL. It appended /event to the full lodge_website (which carries a path, e.g.
 …/newsletter), producing <site>/newsletter/event (a 404). Now it uses only the
